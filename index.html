@@ -1,120 +1,76 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Autônomo</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <style>
-        :root { --green: #28a745; --blue: #007bff; }
-        body { font-family: sans-serif; margin: 0; background: #000; color: white; overflow: hidden; }
-        #video { width: 100vw; height: 100vh; object-fit: cover; }
-        .mira { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 280px; height: 380px; border: 2px solid var(--green); border-radius: 10px;
-            pointer-events: none; box-shadow: 0 0 20px rgba(0,255,0,0.3);
-        }
-        #painel {
-            position: fixed; bottom: 0; left: 0; right: 0; background: white;
-            color: #333; padding: 20px; border-radius: 20px 20px 0 0;
-            display: none; z-index: 1000; max-height: 80vh; overflow-y: auto;
-        }
-        .linha-check { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
-        .acerto { color: var(--green); font-weight: bold; }
-        .erro { color: #dc3545; font-weight: bold; }
-    </style>
-</head>
-<body>
+function processarOMR(qr, ctx) {
+    const [alunoPart, tipoPart, gabPart] = qr.data.split('|');
+    const nome = alunoPart.split(':')[1];
+    const gabarito = gabPart.split(':')[1];
 
-    <video id="video" playsinline></video>
-    <div class="mira"></div>
+    // --- CONFIGURAÇÃO DE CALIBRAÇÃO ---
+    const qrWidth = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
+    const paddingX = qrWidth * 0.55; // Distância horizontal do QR até a 1ª bolinha
+    const distInterQuestao = qrWidth * 0.38; // Distância vertical entre questões
+    const distInterBolinha = qrWidth * 0.22; // Distância horizontal entre A, B, C...
+    // ----------------------------------
 
-    <div id="painel">
-        <h2 id="p-nome" style="margin:0 0 10px 0; color: var(--blue);"></h2>
-        <div id="p-resumo" style="font-weight: bold; margin-bottom: 15px;"></div>
-        <div id="p-detalhes"></div>
-        <button onclick="resetar()" style="width:100%; padding:15px; background:var(--blue); color:white; border:none; border-radius:10px; margin-top:15px; font-weight:bold;">PRÓXIMA PROVA</button>
-    </div>
+    let acertos = 0;
+    let html = "";
 
-    <canvas id="canvas" style="display:none;"></canvas>
+    // Vamos desenhar no canvas para você ver onde o sensor toca
+    ctx.fillStyle = "red";
 
-<script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const painel = document.getElementById('painel');
-    let lendo = true;
+    gabarito.split('').forEach((correta, i) => {
+        let escolhida = "Vazio";
+        let maiorEscuridao = 0;
 
-    async function iniciar() {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280 } });
-        video.srcObject = stream;
-        video.play();
-        requestAnimationFrame(loop);
-    }
+        ['A', 'B', 'C', 'D', 'E'].forEach((letra, index) => {
+            // Cálculo do ponto exato
+            const posX = qr.location.topRightCorner.x + paddingX + (index * distInterBolinha);
+            const posY = qr.location.topRightCorner.y + (i * distInterQuestao) + (qrWidth * 0.1);
 
-    function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const qr = jsQR(imgData.data, imgData.width, imgData.height);
+            // Desenha o ponto de leitura no canvas (para debug)
+            ctx.beginPath();
+            ctx.arc(posX, posY, 3, 0, 2 * Math.PI);
+            ctx.fill();
 
-            if (qr) {
-                lendo = false;
-                processarOMR(qr, ctx);
+            // Análise de Brilho
+            const pixelData = ctx.getImageData(posX, posY, 5, 5).data;
+            let soma = 0;
+            for (let p = 0; p < pixelData.length; p += 4) {
+                soma += (pixelData[p] + pixelData[p+1] + pixelData[p+2]) / 3;
             }
-        }
-        if(lendo) requestAnimationFrame(loop);
-    }
+            const brilho = soma / (pixelData.length / 4);
+            const escuridao = 255 - brilho;
 
-    function processarOMR(qr, ctx) {
-        // 1. Extrair dados do QR
-        const [alunoPart, tipoPart, gabPart] = qr.data.split('|');
-        const nome = alunoPart.split(':')[1];
-        const gabarito = gabPart.split(':')[1];
-
-        // 2. Lógica de detecção de marcas (Simulação de densidade de pixels)
-        // Em um sistema real, usaríamos as coordenadas qr.location para mapear as bolinhas
-        // Aqui, para o teste funcionar, vamos simular a correção baseada no gabarito
-        // enquanto preparamos o mapeamento de coordenadas fixas no próximo commit.
-        
-        let acertos = 0;
-        let html = "";
-        
-        gabarito.split('').forEach((correta, i) => {
-            // Simulando a leitura automática: comparando pixels escuros
-            // Esta parte requer calibração fina das coordenadas X,Y relativas ao QR
-            const sorteioSorte = Math.random() > 0.2; // Simulação: 80% de chance de acerto no teste
-            const respostaAluno = sorteioSorte ? correta : 'X'; 
-
-            const status = (respostaAluno === correta);
-            if(status) acertos++;
-
-            html += `
-                <div class="linha-check">
-                    <span>Questão ${i+1}</span>
-                    <span>Gabarito: <b>${correta}</b></span>
-                    <span class="${status ? 'acerto' : 'erro'}">${status ? '✔ ACERTO' : '✘ ERRO'}</span>
-                </div>`;
+            if (escuridao > maiorEscuridao && escuridao > 60) {
+                maiorEscuridao = escuridao;
+                escolhida = letra;
+            }
         });
 
-        const nota = ((acertos / gabarito.length) * 10).toFixed(1);
+        const status = (escolhida === correta);
+        if(status) acertos++;
 
-        document.getElementById('p-nome').innerText = nome;
-        document.getElementById('p-resumo').innerText = `Nota Final: ${nota} (${acertos}/${gabarito.length})`;
-        document.getElementById('p-detalhes').innerHTML = html;
-        painel.style.display = 'block';
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    }
+        html += `
+            <div class="linha-check">
+                <span>Q${i+1}: [${escolhida}]</span>
+                <span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span>
+            </div>`;
+    });
 
-    function resetar() {
-        painel.style.display = 'none';
-        lendo = true;
-        requestAnimationFrame(loop);
-    }
+    // Mostra o canvas de debug por 2 segundos para você ver os pontos vermelhos
+    document.getElementById('canvas').style.display = "block";
+    document.getElementById('canvas').style.position = "fixed";
+    document.getElementById('canvas').style.top = "0";
+    document.getElementById('canvas').style.width = "100%";
+    
+    setTimeout(() => {
+        document.getElementById('canvas').style.display = "none";
+        exibirPainel(nome, acertos, gabarito.length, html);
+    }, 1000);
+}
 
-    iniciar();
-</script>
-</body>
-</html>
+function exibirPainel(nome, acertos, total, html) {
+    const nota = ((acertos / total) * 10).toFixed(1);
+    document.getElementById('p-nome').innerText = nome;
+    document.getElementById('p-resumo').innerText = `Nota: ${nota}`;
+    document.getElementById('p-detalhes').innerHTML = html;
+    document.getElementById('painel').style.display = 'block';
+}
