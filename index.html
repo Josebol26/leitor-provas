@@ -1,136 +1,182 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Estável</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <style>
-        body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
-        #video { width: 100vw; height: 100vh; object-fit: cover; }
-        #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
-        #msg { position: fixed; top: 20px; width: 80%; left: 10%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 50px; }
-        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; max-height: 80vh; overflow-y: auto; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
-        button { width: 100%; padding: 20px; background: #007bff; color: white; border: none; border-radius: 15px; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<title>Scanner OMR</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+
+<style>
+body{
+    font-family:Arial;
+    text-align:center;
+    background:#f0f0f0;
+}
+video, canvas{
+    width:90%;
+    max-width:500px;
+    border:2px solid #000;
+    margin:10px;
+}
+button{
+    padding:10px 20px;
+    font-size:16px;
+    cursor:pointer;
+}
+#resultado{
+    background:white;
+    padding:15px;
+    margin-top:15px;
+    border-radius:8px;
+}
+</style>
 </head>
 <body>
 
-    <div id="msg">FOQUE NO QR CODE</div>
-    <video id="video" playsinline></video>
-    <canvas id="canvas-ui"></canvas>
+<h2>📄 Scanner OMR</h2>
 
-    <div id="painel">
-        <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
-        <div id="p-detalhes" style="margin: 15px 0;"></div>
-        <button onclick="resetar()">PRÓXIMA PROVA</button>
-    </div>
+<video id="video" autoplay></video>
+<br>
+<button onclick="capturar()">📸 Capturar</button>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<div id="resultado"></div>
 
 <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas-ui');
-    const ctx = canvas.getContext('2d');
-    const msg = document.getElementById('msg');
-    let lendo = true;
-    let contadorEstavel = 0;
 
-    async function iniciar() {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment", width: { ideal: 1280 } } 
-        });
-        video.srcObject = stream;
-        video.play();
-        requestAnimationFrame(loop);
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+// Ativar câmera
+navigator.mediaDevices.getUserMedia({video:true})
+.then(stream => video.srcObject = stream);
+
+// Gabarito (altere se quiser)
+const gabarito = ["A","E","C"];
+
+function capturar(){
+
+    document.getElementById("resultado").innerHTML = "";
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video,0,0);
+
+    const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+
+    lerQR(imageData);
+    lerOMR(imageData);
+}
+
+// =====================
+// LEITURA QR CODE
+// =====================
+function lerQR(imageData){
+
+    const code = jsQR(imageData.data,
+                      imageData.width,
+                      imageData.height);
+
+    if(code){
+        document.getElementById("resultado").innerHTML +=
+            "<p><b>QR:</b> "+code.data+"</p>";
+    }else{
+        document.getElementById("resultado").innerHTML +=
+            "<p>QR não encontrado</p>";
     }
+}
 
-    function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+// =====================
+// LEITURA OMR
+// =====================
+function lerOMR(imageData){
 
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const qr = jsQR(imgData.data, imgData.width, imgData.height);
+    let respostasAluno = [];
+    let nota = 0;
 
-            if (qr) {
-                const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
-                const gabData = qr.data.split('|')[2]?.split(':')[1] || "";
-                
-                // --- DESENHAR A LINHA VERDE (SNAP) ---
-                // Ajustando para envolver o QR e as questões (retângulo comprido)
-                const margem = qrSize * 0.4;
-                const molduraW = qrSize + (margem * 2.5);
-                const molduraH = (qrSize * 1.2) + (gabData.length * (qrSize * 0.38));
-                
-                ctx.strokeStyle = "#00ff00";
-                ctx.lineWidth = 10;
-                ctx.strokeRect(qr.location.topLeftCorner.x - margem, qr.location.topLeftCorner.y - margem, molduraW, molduraH);
+    const largura = canvas.width;
+    const altura = canvas.height;
 
-                // --- SISTEMA DE ESTABILIZAÇÃO ---
-                contadorEstavel++;
-                msg.innerText = "MANTENHA PARADO... " + Math.round((contadorEstavel/30)*100) + "%";
+    const inicioY = altura * 0.55;
+    const espacamentoY = altura * 0.08;
 
-                if (contadorEstavel > 30) { // 1 segundo parado
-                    lendo = false;
-                    processar(qr, imgData);
-                }
-            } else {
-                contadorEstavel = 0;
-                msg.innerText = "BUSCANDO QR CODE...";
+    const inicioX = largura * 0.25;
+    const espacamentoX = largura * 0.1;
+
+    const alternativas = ["A","B","C","D","E"];
+
+    for(let q=0; q<3; q++){
+
+        let maiorPreenchimento = 0;
+        let respostaMarcada = null;
+
+        for(let a=0; a<5; a++){
+
+            let centroX = inicioX + (a * espacamentoX);
+            let centroY = inicioY + (q * espacamentoY);
+
+            let soma = contarPixelsEscuros(
+                imageData,
+                centroX,
+                centroY,
+                largura
+            );
+
+            if(soma > maiorPreenchimento){
+                maiorPreenchimento = soma;
+                respostaMarcada = alternativas[a];
             }
         }
-        if(lendo) requestAnimationFrame(loop);
+
+        respostasAluno.push(respostaMarcada);
+
+        if(respostaMarcada === gabarito[q]){
+            nota++;
+        }
     }
 
-    function processar(qr, imgData) {
-        const [aluno, tipo, gab] = qr.data.split('|');
-        const gabStr = gab.split(':')[1];
-        const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
+    document.getElementById("resultado").innerHTML +=
+        "<p><b>Respostas:</b> "+respostasAluno.join(", ")+"</p>";
 
-        // Calibração dos pontos de leitura (ajustado para o seu modelo)
-        const startX = qr.location.topLeftCorner.x + (qrSize * 0.25);
-        const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.68);
-        const sH = qrSize * 0.28;
-        const sV = qrSize * 0.36;
+    document.getElementById("resultado").innerHTML +=
+        "<p><b>Nota:</b> "+nota+"</p>";
+}
 
-        let acertos = 0;
-        let html = "";
+// =====================
+// Conta pixels escuros numa área circular
+// =====================
+function contarPixelsEscuros(imageData, cx, cy, largura){
 
-        gabStr.split('').forEach((correta, i) => {
-            let escolhida = "Vazio";
-            let maxE = 0;
-            ['A','B','C','D','E'].forEach((letra, col) => {
-                const px = Math.floor(startX + (col * sH));
-                const py = Math.floor(startY + (i * sV));
-                const idx = (py * canvas.width + px) * 4;
-                
-                // Cálculo de escuridão
-                const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
-                
-                // Feedback visual dos pontos
-                ctx.fillStyle = (esc > 85) ? "#00ff00" : "red";
-                ctx.beginPath(); ctx.arc(px, py, 6, 0, 7); ctx.fill();
+    let raio = 12;
+    let soma = 0;
 
-                if (esc > maxE && esc > 85) { maxE = esc; escolhida = letra; }
-            });
-            if(escolhida === correta) acertos++;
-            html += `<div class="linha-check"><span>Q${i+1}: [${escolhida}]</span><span>${escolhida===correta?'✔':'✘'}</span></div>`;
-        });
+    for(let y=-raio; y<raio; y++){
+        for(let x=-raio; x<raio; x++){
 
-        document.getElementById('p-nome').innerText = aluno.split(':')[1];
-        document.getElementById('p-detalhes').innerHTML = html;
-        document.getElementById('painel').style.display = 'block';
+            if(x*x + y*y <= raio*raio){
+
+                let px = Math.floor(cx + x);
+                let py = Math.floor(cy + y);
+
+                let pos = (py * largura + px) * 4;
+
+                let r = imageData.data[pos];
+                let g = imageData.data[pos+1];
+                let b = imageData.data[pos+2];
+
+                let brilho = (r+g+b)/3;
+
+                if(brilho < 120){
+                    soma++;
+                }
+            }
+        }
     }
 
-    function resetar() {
-        document.getElementById('painel').style.display = 'none';
-        lendo = true;
-        contadorEstavel = 0;
-        requestAnimationFrame(loop);
-    }
+    return soma;
+}
 
-    iniciar();
 </script>
 </body>
 </html>
