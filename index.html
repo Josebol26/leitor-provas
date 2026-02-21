@@ -3,39 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Calibração Fina</title>
+    <title>Scanner OMR - Rápido e Largo</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
-        #controles { 
-            position: fixed; top: 70px; right: 10px; z-index: 100; 
-            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; color: white;
-            display: none; flex-direction: column; gap: 10px;
-        }
-        .btn-ajuste { background: #444; color: white; border: 1px solid #fff; padding: 10px; border-radius: 5px; font-size: 18px; }
-        #msg { position: fixed; top: 20px; width: 80%; left: 10%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 10px; }
-        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; max-height: 70vh; overflow-y: auto; }
-        #btn-scan { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); padding: 20px 40px; background: #28a745; color: white; border: none; border-radius: 50px; font-weight: bold; display: none; z-index: 110; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        #msg { position: fixed; top: 20px; width: 80%; left: 10%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 10px; }
+        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; max-height: 80vh; overflow-y: auto; }
+        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+        button { width: 100%; padding: 18px; background: #28a745; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div id="msg">APONTE PARA O QR CODE</div>
-    
-    <div id="controles">
-        <span>Ajustar Altura:</span>
-        <button class="btn-ajuste" onclick="offsetY += 0.05">↓</button>
-        <button class="btn-ajuste" onclick="offsetY -= 0.05">↑</button>
-        <hr>
-        <span>Espaçamento:</span>
-        <button class="btn-ajuste" onclick="gapV += 0.01">+</button>
-        <button class="btn-ajuste" onclick="gapV -= 0.01">-</button>
-    </div>
-
-    <button id="btn-scan" onclick="confirmarLeitura()">LER AGORA</button>
-
     <video id="video" playsinline></video>
     <canvas id="canvas-ui"></canvas>
 
@@ -51,16 +33,14 @@
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
     
-    // VARIÁVEIS DE CALIBRAÇÃO DINÂMICA
-    let offsetX = 0.25; 
-    let offsetY = 1.65; 
-    let gapH = 0.28;    
-    let gapV = 0.35;    
+    // --- AJUSTES DE CALIBRAÇÃO ---
+    let offsetX = 0.22; // Início horizontal
+    let offsetY = 1.68; // Início vertical (distância do QR)
+    let gapH = 0.35;    // Aumentado: Afasta os pontos lateralmente (A B C D E)
+    let gapV = 0.36;    // Espaçamento entre linhas (Q1, Q2...)
 
     let lendo = true;
-    let dadosQR = null;
-    let pontosAtuais = [];
-    let ultimaImgData = null;
+    let frameSkip = 0;
 
     async function iniciar() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -77,24 +57,29 @@
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
 
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const qr = jsQR(imgData.data, imgData.width, imgData.height);
+            // Otimização: Só tenta ler o QR a cada 4 frames (reduz lentidão)
+            frameSkip++;
+            if (frameSkip % 4 === 0) {
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
-            if (qr) {
-                dadosQR = qr;
-                ultimaImgData = imgData;
-                document.getElementById('controles').style.display = 'flex';
-                document.getElementById('btn-scan').style.display = 'block';
-                desenharGrade(qr);
-                msg.innerText = "AJUSTE OS PONTOS E CLIQUE EM LER";
-            } else {
-                msg.innerText = "BUSCANDO QR CODE...";
+                if (qr) {
+                    desenharPreview(qr);
+                    msg.innerText = "ESTABILIZE PARA LER...";
+                    
+                    // Se o QR estiver visível, faz a leitura final
+                    setTimeout(() => {
+                        if (lendo) processarLeitura(qr, imgData);
+                    }, 800);
+                } else {
+                    msg.innerText = "BUSCANDO QR CODE...";
+                }
             }
         }
         if(lendo) requestAnimationFrame(loop);
     }
 
-    function desenharGrade(qr) {
+    function desenharPreview(qr) {
         const tl = qr.location.topLeftCorner;
         const tr = qr.location.topRightCorner;
         const bl = qr.location.bottomLeftCorner;
@@ -104,61 +89,58 @@
         const vY = { x: (bl.x - tl.x) / qrSize, y: (bl.y - tl.y) / qrSize };
 
         const gabStr = qr.data.split('|')[2].split(':')[1];
-        pontosAtuais = [];
 
+        // Desenha os pontos vermelhos para você ver o encaixe antes de ler
         for (let i = 0; i < gabStr.length; i++) {
             for (let col = 0; col < 5; col++) {
-                const posX = tl.x + (vX.x * (offsetX + col * gapH) * qrSize) + (vY.x * (offsetY + i * gapV) * qrSize);
-                const posY = tl.y + (vX.y * (offsetX + col * gapH) * qrSize) + (vY.y * (offsetY + i * gapV) * qrSize);
+                const px = tl.x + (vX.x * (offsetX + col * gapH) * qrSize) + (vY.x * (offsetY + i * gapV) * qrSize);
+                const py = tl.y + (vX.y * (offsetX + col * gapH) * qrSize) + (vY.y * (offsetY + i * gapV) * qrSize);
                 
                 ctx.fillStyle = "red";
-                ctx.beginPath();
-                ctx.arc(posX, posY, 6, 0, 7);
-                ctx.fill();
-                
-                pontosAtuais.push({x: posX, y: posY, questao: i, letra: ['A','B','C','D','E'][col], correta: gabStr[i]});
+                ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill();
             }
         }
     }
 
-    function confirmarLeitura() {
+    function processarLeitura(qr, imgDataFull) {
         lendo = false;
-        const imgData = ultimaImgData.data;
-        const gabarito = dadosQR.data.split('|')[2].split(':')[1];
+        const dados = qr.data.split('|');
+        const aluno = dados[0].split(':')[1];
+        const gabarito = dados[2].split(':')[1];
         
-        let marcadas = new Array(gabarito.length).fill("Vazio");
-        let maiorEsc = new Array(gabarito.length).fill(0);
+        const tl = qr.location.topLeftCorner;
+        const tr = qr.location.topRightCorner;
+        const bl = qr.location.bottomLeftCorner;
+        const qrSize = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
+        const vX = { x: (tr.x - tl.x) / qrSize, y: (tr.y - tl.y) / qrSize };
+        const vY = { x: (bl.x - tl.x) / qrSize, y: (bl.y - tl.y) / qrSize };
 
-        pontosAtuais.forEach(p => {
-            const idx = (Math.floor(p.y) * canvas.width + Math.floor(p.x)) * 4;
-            const esc = 255 - ((imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3);
-
-            if (esc > maiorEsc[p.questao] && esc > 70) {
-                maiorEsc[p.questao] = esc;
-                marcadas[p.questao] = p.letra;
-            }
-        });
-
-        exibirResultado(dadosQR.data.split('|')[0].split(':')[1], gabarito, marcadas);
-    }
-
-    function exibirResultado(nome, gabarito, marcadas) {
         let acertos = 0;
         let html = "";
-        marcadas.forEach((m, i) => {
-            const ok = (m === gabarito[i]);
-            if(ok) acertos++;
-            html += `<div class="linha-check">
-                <span>Q${i+1}: SUA [${m}] - GAB [${gabarito[i]}]</span>
-                <span>${ok ? '✅' : '❌'}</span>
-            </div>`;
-        });
 
-        document.getElementById('p-nome').innerText = nome;
+        for (let i = 0; i < gabarito.length; i++) {
+            let escolhida = "Vazio";
+            let maxEsc = 0;
+
+            for (let col = 0; col < 5; col++) {
+                const px = Math.floor(tl.x + (vX.x * (offsetX + col * gapH) * qrSize) + (vY.x * (offsetY + i * gapV) * qrSize));
+                const py = Math.floor(tl.y + (vX.y * (offsetX + col * gapH) * qrSize) + (vY.y * (offsetY + i * gapV) * qrSize));
+                
+                const idx = (py * canvas.width + px) * 4;
+                const esc = 255 - ((imgDataFull.data[idx] + imgDataFull.data[idx+1] + imgDataFull.data[idx+2]) / 3);
+
+                if (esc > maxEsc && esc > 80) {
+                    maxEsc = esc;
+                    escolhida = ['A','B','C','D','E'][col];
+                }
+            }
+            if (escolhida === gabarito[i]) acertos++;
+            html += `<div class="linha-check"><span>Q${i+1}: SUA [${escolhida}]</span><span>${escolhida===gabarito[i]?'✅':'❌'}</span></div>`;
+        }
+
+        document.getElementById('p-nome').innerText = aluno;
         document.getElementById('p-detalhes').innerHTML = html;
         document.getElementById('painel').style.display = 'block';
-        document.getElementById('controles').style.display = 'none';
-        document.getElementById('btn-scan').style.display = 'none';
     }
 
     function resetar() {
