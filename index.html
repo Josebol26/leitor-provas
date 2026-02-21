@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Enquadramento Obrigatório</title>
+    <title>Scanner OMR - Ultra Sensível</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script async src="https://docs.opencv.org/4.5.4/opencv.js" onload="cvReady()"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
-        #msg { position: fixed; top: 20px; width: 90%; left: 5%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.6); padding: 12px; border-radius: 10px; transition: all 0.3s; }
+        #msg { position: fixed; top: 20px; width: 80%; left: 10%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 12px; font-size: 14px; text-transform: uppercase; }
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; max-height: 70vh; overflow-y: auto; }
         .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
-        button { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; }
+        button { width: 100%; padding: 20px; background: #28a745; color: white; border: none; border-radius: 15px; font-weight: bold; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <div id="msg">CARREGANDO SISTEMA...</div>
+    <div id="msg">CARREGANDO VISÃO COMPUTACIONAL...</div>
     <video id="video" playsinline></video>
     <canvas id="canvas-ui"></canvas>
 
@@ -36,11 +36,10 @@
     const msg = document.getElementById('msg');
     let lendo = true;
     let cvOk = false;
-    let molduraDetectada = false;
 
     function cvReady() {
         cvOk = true;
-        msg.innerText = "ENQUADRE A MOLDURA PRETA";
+        msg.innerText = "ALINHE A MOLDURA PRETA NA TELA";
         iniciarVideo();
     }
 
@@ -59,14 +58,14 @@
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
 
+            let molduraEncontrada = false;
             if (cvOk) {
-                molduraDetectada = detectarBordas();
+                molduraEncontrada = detectarMoldura();
             }
 
-            // MUDANÇA CHAVE: Só tenta ler o QR se a moldura estiver visível
-            if (molduraDetectada) {
-                msg.innerText = "MOLDURA OK! LENDO QR CODE...";
-                msg.style.background = "rgba(40, 167, 69, 0.8)"; // Verde
+            if (molduraEncontrada) {
+                msg.innerText = "MOLDURA DETECTADA! LENDO...";
+                msg.style.color = "#00ff00";
                 
                 const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const qr = jsQR(imgData.data, imgData.width, imgData.height);
@@ -76,57 +75,61 @@
                     processar(qr, imgData);
                 }
             } else {
-                msg.innerText = "ENQUADRE A MOLDURA PRETA";
-                msg.style.background = "rgba(220, 53, 69, 0.8)"; // Vermelho
+                msg.innerText = "BUSCANDO MOLDURA PRETA...";
+                msg.style.color = "white";
             }
         }
         if(lendo) requestAnimationFrame(loop);
     }
 
-    function detectarBordas() {
+    function detectarMoldura() {
         let achou = false;
         try {
             let src = cv.imread(video);
             let dst = new cv.Mat();
             cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
-            cv.Canny(dst, dst, 100, 200);
+            // Filtro para realçar a borda mesmo com luz ruim
+            cv.adaptiveThreshold(dst, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
             
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
             cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-            let maxArea = 0;
-            let melhor = null;
-
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
-                if (area > 40000) {
+                
+                // Reduzimos a exigência de área para 10.000 (mais sensível a distância)
+                if (area > 10000) {
                     let approx = new cv.Mat();
-                    cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                    if (approx.rows === 4 && area > maxArea) {
-                        maxArea = area;
-                        melhor = approx;
+                    let peri = cv.arcLength(cnt, true);
+                    // Aumentamos a tolerância para 0.04 (aceita retângulos menos perfeitos)
+                    cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
+
+                    if (approx.rows === 4) {
+                        achou = true;
+                        desenharLinhaVerde(approx);
+                        break;
                     }
+                    approx.delete();
                 }
             }
-
-            if (melhor) {
-                achou = true;
-                ctx.strokeStyle = "#00ff00";
-                ctx.lineWidth = 12;
-                ctx.beginPath();
-                ctx.moveTo(melhor.data32S[0], melhor.data32S[1]);
-                for (let i = 1; i < 4; i++) {
-                    ctx.lineTo(melhor.data32S[i*2], melhor.data32S[i*2+1]);
-                }
-                ctx.closePath();
-                ctx.stroke();
-            }
-
             src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
         } catch (e) { }
         return achou;
+    }
+
+    function desenharLinhaVerde(pontos) {
+        ctx.strokeStyle = "#00ff00";
+        ctx.lineWidth = 15;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(pontos.data32S[0], pontos.data32S[1]);
+        for (let i = 1; i < 4; i++) {
+            ctx.lineTo(pontos.data32S[i*2], pontos.data32S[i*2+1]);
+        }
+        ctx.closePath();
+        ctx.stroke();
     }
 
     function processar(qr, imgData) {
@@ -134,7 +137,7 @@
         const gabStr = gab.split(':')[1];
         const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
 
-        // Geometria refinada
+        // Geometria precisa baseada na sua foto
         const startX = qr.location.topLeftCorner.x + (qrSize * 0.22);
         const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.65);
         const sH = qrSize * 0.28;
@@ -151,24 +154,24 @@
                 const py = Math.floor(startY + (i * sV));
                 const idx = (py * canvas.width + px) * 4;
                 const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
-                if (esc > maxE && esc > 80) { maxE = esc; escolhida = letra; }
                 
-                // Desenha ponto vermelho de confirmação
-                ctx.fillStyle = "red";
-                ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill();
+                ctx.fillStyle = (esc > 80) ? "lime" : "red";
+                ctx.beginPath(); ctx.arc(px, py, 6, 0, 7); ctx.fill();
+
+                if (esc > maxE && esc > 80) { maxE = esc; escolhida = letra; }
             });
             if(escolhida === correta) acertos++;
             html += `<div class="linha-check"><span>Q${i+1}: [${escolhida}]</span><span>${escolhida===correta?'✔':'✘'}</span></div>`;
         });
 
-        if (navigator.vibrate) navigator.vibrate(200);
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         
         setTimeout(() => {
             document.getElementById('p-nome').innerText = aluno.split(':')[1];
-            document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabStr.length)*10).toFixed(1)}`;
+            document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabStr.length)*10).toFixed(1)} (${acertos}/${gabStr.length})`;
             document.getElementById('p-detalhes').innerHTML = html;
             document.getElementById('painel').style.display = 'block';
-        }, 500);
+        }, 800);
     }
 
     function resetar() {
