@@ -3,21 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Snap na Moldura</title>
+    <title>Scanner OMR - Inteligência de Bordas</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script async src="https://docs.opencv.org/4.5.4/opencv.js" onload="cvReady()"></script>
+    
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; }
-        #msg { position: fixed; top: 20px; width: 100%; text-align: center; color: white; z-index: 20; font-weight: bold; text-shadow: 2px 2px 2px #000; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
-        button { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; margin-top: 10px; }
+        #msg { position: fixed; top: 20px; width: 100%; text-align: center; color: white; z-index: 20; font-weight: bold; }
+        .linha-check { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
+        button { width: 100%; padding: 18px; background: #28a745; color: white; border: none; border-radius: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="msg">ENQUADRE A MOLDURA PRETA</div>
+    <div id="msg">CARREGANDO INTELIGÊNCIA...</div>
     <video id="video" playsinline></video>
     <canvas id="canvas-ui"></canvas>
 
@@ -32,13 +34,16 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
-    const painel = document.getElementById('painel');
-    const msg = document.getElementById('msg');
-    
     let lendo = true;
-    let frameCount = 0;
+    let opencvCarregado = false;
 
-    async function iniciar() {
+    function cvReady() {
+        opencvCarregado = true;
+        document.getElementById('msg').innerText = "APONTE PARA A PROVA";
+        iniciarVideo();
+    }
+
+    async function iniciarVideo() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: "environment", width: { ideal: 1280 } } 
         });
@@ -48,109 +53,120 @@
     }
 
     function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo && opencvCarregado) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
             
+            // 1. Detecção de Bordas com OpenCV
+            detectarBordasOpenCV();
+
+            // 2. Leitura de QR Code para dados
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
-                const gabarito = qr.data.split('|')[2].split(':')[1];
-                
-                // --- DETECÇÃO DA MOLDURA (SNAP) ---
-                // Expandimos a partir do QR Code para achar a borda preta grossa
-                const offsetMoldura = qrSize * 0.45; 
-                const molduraL = qr.location.topLeftCorner.x - offsetMoldura;
-                const molduraT = qr.location.topLeftCorner.y - offsetMoldura;
-                const molduraW = qrSize + (offsetMoldura * 2);
-                const molduraH = (qrSize * 1.5) + (gabarito.length * (qrSize * 0.35)) + offsetMoldura;
-
-                // Desenha a linha verde exatamente na moldura
-                ctx.strokeStyle = "#00ff00";
-                ctx.lineWidth = 6;
-                ctx.strokeRect(molduraL, molduraT, molduraW, molduraH);
-
-                // --- POSICIONAMENTO DAS BOLINHAS (BASEADO NA MOLDURA) ---
-                // Ajustado conforme a sua imagem: "01:" fica à esquerda, bolinhas centralizadas
-                const startX = molduraL + (molduraW * 0.28); 
-                const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.65);
-                const stepH = qrSize * 0.28; // Espaço entre A, B, C...
-                const stepV = qrSize * 0.35; // Espaço entre Q1, Q2...
-
-                let pontosParaLeitura = [];
-                gabarito.split('').forEach((correta, i) => {
-                    ['A','B','C','D','E'].forEach((letra, col) => {
-                        const px = startX + (col * stepH);
-                        const py = startY + (i * stepV);
-                        
-                        ctx.fillStyle = "red";
-                        ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill();
-                        pontosParaLeitura.push({x: px, y: py, letra: letra, questao: i, correta: correta});
-                    });
-                });
-
-                frameCount++;
-                msg.innerText = "ESTABILIZE (" + Math.round((frameCount/40)*100) + "%)";
-
-                if (frameCount >= 40) {
-                    lendo = false;
-                    analisarPreenchimento(imgData.data, pontosParaLeitura, qr.data);
-                }
-            } else {
-                frameCount = 0;
-                msg.innerText = "BUSCANDO MOLDURA E QR CODE...";
+                processarOMR(qr, imgData);
             }
         }
         if(lendo) requestAnimationFrame(loop);
     }
 
-    function analisarPreenchimento(pixels, pontos, qrData) {
-        const [alunoPart, tipoPart, gabPart] = qrData.split('|');
-        const nome = alunoPart.split(':')[1];
-        const gabarito = gabPart.split(':')[1];
-        
-        let marcadas = new Array(gabarito.length).fill("Vazio");
-        let maiorEsc = new Array(gabarito.length).fill(0);
+    function detectarBordasOpenCV() {
+        let src = cv.imread(video);
+        let dst = new cv.Mat();
+        cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(dst, dst, new cv.Size(5, 5), 0);
+        cv.Canny(dst, dst, 75, 200);
 
-        pontos.forEach(p => {
-            const idx = (Math.floor(p.y) * canvas.width + Math.floor(p.x)) * 4;
-            // Cálculo de escuridão: 255 (preto total) a 0 (branco)
-            const esc = 255 - ((pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3);
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-            if (esc > maiorEsc[p.questao] && esc > 70) { // 70 é a sensibilidade para a bolinha preta
-                maiorEsc[p.questao] = esc;
-                marcadas[p.questao] = p.letra;
+        let maxArea = 0;
+        let bestCnt = null;
+
+        for (let i = 0; i < contours.size(); ++i) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area > 50000) { // Filtra apenas retângulos grandes
+                let peri = cv.arcLength(cnt, true);
+                let approx = new cv.Mat();
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                if (approx.rows === 4 && area > maxArea) {
+                    bestCnt = approx;
+                    maxArea = area;
+                }
             }
-        });
+        }
+
+        if (bestCnt) {
+            // Desenha a linha verde "encaixada"
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            let p1 = { x: bestCnt.data32S[0], y: bestCnt.data32S[1] };
+            ctx.moveTo(p1.x, p1.y);
+            for (let i = 1; i < 4; i++) {
+                ctx.lineTo(bestCnt.data32S[i * 2], bestCnt.data32S[i * 2 + 1]);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+
+        src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+    }
+
+    function processarOMR(qr, imgData) {
+        const [aluno, tipo, gab] = qr.data.split('|');
+        const gabarito = gab.split(':')[1];
+        const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
+
+        // Geometria de leitura (Ponto de início Questão 1)
+        const startX = qr.location.topLeftCorner.x + (qrSize * 0.22);
+        const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.65);
+        const stepH = qrSize * 0.28;
+        const stepV = qrSize * 0.35;
 
         let acertos = 0;
         let html = "";
-        marcadas.forEach((m, i) => {
-            const ok = (m === gabarito[i]);
-            if(ok) acertos++;
-            html += `<div class="linha-check">
-                <span>Q${i+1}: [${m}]</span>
-                <span style="color:${ok?'green':'red'}">${ok?'✔':'✘'}</span>
-            </div>`;
+
+        gabarito.split('').forEach((correta, i) => {
+            let escolhida = "Vazio";
+            let maiorEsc = 0;
+
+            ['A','B','C','D','E'].forEach((letra, col) => {
+                const px = Math.floor(startX + (col * stepH));
+                const py = Math.floor(startY + (i * stepV));
+
+                ctx.fillStyle = "red";
+                ctx.beginPath(); ctx.arc(px, py, 4, 0, 7); ctx.fill();
+
+                const idx = (py * canvas.width + px) * 4;
+                const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
+
+                if (esc > maiorEsc && esc > 70) {
+                    maiorEsc = esc;
+                    escolhida = letra;
+                }
+            });
+            if(escolhida === correta) acertos++;
+            html += `<div class="linha-check"><span>Q${i+1}: [${escolhida}]</span><span>${escolhida===correta?'✔':'✘'}</span></div>`;
         });
 
-        document.getElementById('p-nome').innerText = nome;
-        document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabarito.length)*10).toFixed(1)} (${acertos}/${gabarito.length})`;
+        // Trava a leitura após encontrar o QR
+        lendo = false;
+        document.getElementById('p-nome').innerText = aluno.split(':')[1];
+        document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabarito.length)*10).toFixed(1)}`;
         document.getElementById('p-detalhes').innerHTML = html;
-        painel.style.display = 'block';
+        document.getElementById('painel').style.display = 'block';
     }
 
     function resetar() {
-        painel.style.display = 'none';
-        frameCount = 0;
+        document.getElementById('painel').style.display = 'none';
         lendo = true;
         requestAnimationFrame(loop);
     }
-
-    iniciar();
 </script>
 </body>
 </html>
