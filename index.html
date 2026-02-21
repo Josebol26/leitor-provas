@@ -3,34 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Modo Congelar</title>
+    <title>Scanner OMR - Enquadramento Obrigatório</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
         
-        #msg { position: fixed; top: 20px; width: 70%; left: 15%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 50px; }
+        /* Mensagem flutuante */
+        #msg { position: fixed; top: 30px; width: 80%; left: 10%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 15px; border: 2px solid #555; font-size: 14px; }
         
-        .botoes-flutuantes { 
-            position: fixed; bottom: 40px; left: 0; right: 0; 
-            display: none; justify-content: center; gap: 10px; z-index: 100; 
+        /* Área de enquadramento visual */
+        #mira-guia { 
+            position: fixed; top: 15%; left: 50%; transform: translateX(-50%);
+            width: 180px; height: 180px; border: 3px dashed rgba(255,255,255,0.5);
+            border-radius: 10px; z-index: 5; pointer-events: none;
         }
-        
-        #btn-capturar { padding: 20px 30px; background: #28a745; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        #btn-repetir { padding: 20px 30px; background: #dc3545; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; }
 
+        .botoes-flutuantes { position: fixed; bottom: 40px; left: 0; right: 0; display: none; justify-content: center; gap: 15px; z-index: 100; }
+        #btn-capturar { padding: 20px 30px; background: #28a745; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px #000; }
+        #btn-repetir { padding: 20px 30px; background: #dc3545; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; }
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 110; color: #333; max-height: 80vh; overflow-y: auto; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
     </style>
 </head>
 <body>
 
-    <div id="msg">Aguardando QR Code...</div>
+    <div id="msg">COLOQUE O QR CODE DENTRO DO QUADRADO</div>
+    <div id="mira-guia"></div>
     
     <div class="botoes-flutuantes" id="area-botoes">
-        <button id="btn-repetir" onclick="descongelar()">REPETIR 🔄</button>
-        <button id="btn-capturar" onclick="processarAgora()">CONFERIR NOTA ✅</button>
+        <button id="btn-repetir" onclick="descongelar()">🔄 REPETIR</button>
+        <button id="btn-capturar" onclick="processarAgora()">✅ CONFERIR NOTA</button>
     </div>
 
     <video id="video" playsinline style="display:none;"></video>
@@ -47,12 +50,15 @@
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
+    const mira = document.getElementById('mira-guia');
     const areaBotoes = document.getElementById('area-botoes');
     
     const CONFIG = { offsetX: -0.12, offsetY: 1.42, gapH: 0.35, gapV: 0.28 };
 
-    let estado = "PROCURANDO"; // PROCURANDO, CONGELADO, RESULTADO
+    let estado = "PROCURANDO";
     let cacheLeitura = null;
+    let frameCount = 0;
+    const FRAMES_STABLE = 40; // Aumentei para ~1.3 segundos de estabilidade real
 
     async function iniciarCamera() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -64,30 +70,76 @@
     }
 
     function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            if (estado === "PROCURANDO") {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0);
+        if (video.readyState === video.HAVE_ENOUGH_DATA && estado === "PROCURANDO") {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
 
-                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const qr = jsQR(imgData.data, imgData.width, imgData.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
-                if (qr) {
-                    // CONGELAR!
-                    estado = "CONGELADO";
+            if (qr) {
+                // Cálculo de Centralização e Tamanho
+                const qrX = qr.location.topLeftCorner.x;
+                const qrY = qr.location.topLeftCorner.y;
+                const qrSize = Math.sqrt(Math.pow(qr.location.topRightCorner.x - qrX, 2) + Math.pow(qr.location.topRightCorner.y - qrY, 2));
+                
+                // REGRAS DE OURO PARA CAPTURAR:
+                // 1. Deve estar na metade superior horizontalmente
+                // 2. Deve estar no topo verticalmente
+                // 3. Deve ter um tamanho mínimo (não ler de muito longe)
+                const centralizado = (qrX > canvas.width * 0.2 && qrX < canvas.width * 0.6);
+                const noTopo = (qrY > canvas.height * 0.05 && qrY < canvas.height * 0.35);
+                const tamanhoOk = (qrSize > 100); 
+
+                if (centralizado && noTopo && tamanhoOk) {
                     const pontos = calcularPontos(qr);
-                    desenharInterface(pontos);
-                    cacheLeitura = { qr, imgData, pontos };
+                    desenharFeedback(qr, pontos, true);
                     
-                    msg.innerText = "IMAGEM CONGELADA";
-                    areaBotoes.style.display = 'flex';
+                    frameCount++;
+                    msg.innerText = "MANTENHA PARADO: " + Math.round((frameCount/FRAMES_STABLE)*100) + "%";
+                    msg.style.borderColor = "#00ff00";
+                    mira.style.borderColor = "#00ff00";
+
+                    if (frameCount >= FRAMES_STABLE) {
+                        estado = "CONGELADO";
+                        cacheLeitura = { qr, imgData, pontos };
+                        msg.innerText = "CAPTURADO COM SUCESSO!";
+                        mira.style.display = "none";
+                        areaBotoes.style.display = 'flex';
+                    }
                 } else {
-                    msg.innerText = "APONTE PARA O QR CODE";
+                    desenharFeedback(qr, [], false);
+                    frameCount = 0;
+                    msg.innerText = "COLOQUE O QR CODE DENTRO DO QUADRADO";
+                    msg.style.borderColor = "#ff0000";
+                    mira.style.borderColor = "#ff0000";
                 }
+            } else {
+                frameCount = 0;
+                msg.innerText = "BUSCANDO QR CODE...";
+                msg.style.borderColor = "#555";
+                mira.style.borderColor = "rgba(255,255,255,0.5)";
             }
         }
         if (estado !== "RESULTADO") requestAnimationFrame(loop);
+    }
+
+    function desenharFeedback(qr, pontos, alinhado) {
+        ctx.strokeStyle = alinhado ? "#00ff00" : "#ff0000";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y);
+        ctx.lineTo(qr.location.topRightCorner.x, qr.location.topRightCorner.y);
+        ctx.lineTo(qr.location.bottomRightCorner.x, qr.location.bottomRightCorner.y);
+        ctx.lineTo(qr.location.bottomLeftCorner.x, qr.location.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
+
+        pontos.forEach(p => {
+            ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
+            ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
+        });
     }
 
     function calcularPontos(qr) {
@@ -110,25 +162,17 @@
         return lista;
     }
 
-    function desenharInterface(pontos) {
-        pontos.forEach(p => {
-            ctx.fillStyle = "rgba(0, 255, 0, 0.7)";
-            ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
-            ctx.strokeStyle = "white"; ctx.stroke();
-        });
-    }
-
     function descongelar() {
         estado = "PROCURANDO";
         areaBotoes.style.display = 'none';
-        cacheLeitura = null;
+        mira.style.display = "block";
+        frameCount = 0;
     }
 
     function processarAgora() {
         if (!cacheLeitura) return;
         estado = "RESULTADO";
         areaBotoes.style.display = 'none';
-
         const { qr, imgData, pontos } = cacheLeitura;
         const gabarito = qr.data.split('|')[2].split(':')[1];
         let marcadas = new Array(gabarito.length).fill("Vazio");
@@ -147,17 +191,19 @@
         let html = "";
         marcadas.forEach((m, i) => {
             if (m === gabarito[i]) acertos++;
-            html += `<div class="linha-check"><span>Q${i+1}: [${m}]</span> <span>${m===gabarito[i]?'✅':'❌'}</span></div>`;
+            html += `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #eee;"><span>Q${i+1}: [${m}]</span> <span>${m===gabarito[i]?'✅':'❌'}</span></div>`;
         });
 
         document.getElementById('p-nome').innerText = qr.data.split('|')[0].split(':')[1];
-        document.getElementById('p-detalhes').innerHTML = `<h1>${acertos}/${gabarito.length}</h1><hr>${html}`;
+        document.getElementById('p-detalhes').innerHTML = `<h1 style="text-align:center;">${acertos}/${gabarito.length}</h1><hr>${html}`;
         document.getElementById('painel').style.display = 'block';
     }
 
     function resetarTudo() {
         document.getElementById('painel').style.display = 'none';
         estado = "PROCURANDO";
+        mira.style.display = "block";
+        frameCount = 0;
         requestAnimationFrame(loop);
     }
 
