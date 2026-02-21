@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Inteligência de Bordas</title>
+    <title>Scanner OMR Pro - Estabilizado</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script async src="https://docs.opencv.org/4.5.4/opencv.js" onload="cvReady()"></script>
-    
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
-        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; }
-        #msg { position: fixed; top: 20px; width: 100%; text-align: center; color: white; z-index: 20; font-weight: bold; }
-        .linha-check { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
-        button { width: 100%; padding: 18px; background: #28a745; color: white; border: none; border-radius: 12px; font-weight: bold; }
+        #msg { position: fixed; top: 20px; width: 100%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.5); padding: 10px 0; }
+        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; max-height: 70vh; overflow-y: auto; }
+        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+        button { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -25,7 +24,7 @@
 
     <div id="painel">
         <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
-        <p id="p-resumo" style="font-weight: bold; margin: 10px 0;"></p>
+        <p id="p-resumo" style="font-weight: bold; margin: 15px 0;"></p>
         <div id="p-detalhes"></div>
         <button onclick="resetar()">PRÓXIMA PROVA</button>
     </div>
@@ -35,11 +34,12 @@
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
     let lendo = true;
-    let opencvCarregado = false;
+    let cvOk = false;
+    let ultimoProcessamento = 0;
 
     function cvReady() {
-        opencvCarregado = true;
-        document.getElementById('msg').innerText = "APONTE PARA A PROVA";
+        cvOk = true;
+        document.getElementById('msg').innerText = "APONTE PARA A MOLDURA";
         iniciarVideo();
     }
 
@@ -52,112 +52,104 @@
         requestAnimationFrame(loop);
     }
 
-    function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo && opencvCarregado) {
+    function loop(time) {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
-            
-            // 1. Detecção de Bordas com OpenCV
-            detectarBordasOpenCV();
 
-            // 2. Leitura de QR Code para dados
+            // Processa bordas apenas a cada 200ms para não congelar
+            if (cvOk && time - ultimoProcessamento > 200) {
+                detectarSnapBordas();
+                ultimoProcessamento = time;
+            }
+
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                processarOMR(qr, imgData);
+                lendo = false;
+                processar(qr, imgData);
             }
         }
         if(lendo) requestAnimationFrame(loop);
     }
 
-    function detectarBordasOpenCV() {
-        let src = cv.imread(video);
-        let dst = new cv.Mat();
-        cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
-        cv.GaussianBlur(dst, dst, new cv.Size(5, 5), 0);
-        cv.Canny(dst, dst, 75, 200);
+    function detectarSnapBordas() {
+        try {
+            let src = cv.imread(video);
+            let dst = new cv.Mat();
+            cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+            cv.Canny(dst, dst, 50, 150);
+            
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-        let contours = new cv.MatVector();
-        let hierarchy = new cv.Mat();
-        cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            let maxArea = 0;
+            let melhorPoligono = null;
 
-        let maxArea = 0;
-        let bestCnt = null;
-
-        for (let i = 0; i < contours.size(); ++i) {
-            let cnt = contours.get(i);
-            let area = cv.contourArea(cnt);
-            if (area > 50000) { // Filtra apenas retângulos grandes
-                let peri = cv.arcLength(cnt, true);
-                let approx = new cv.Mat();
-                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-                if (approx.rows === 4 && area > maxArea) {
-                    bestCnt = approx;
-                    maxArea = area;
+            for (let i = 0; i < contours.size(); ++i) {
+                let cnt = contours.get(i);
+                let area = cv.contourArea(cnt);
+                if (area > 30000) {
+                    let approx = new cv.Mat();
+                    cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
+                    if (approx.rows === 4 && area > maxArea) {
+                        maxArea = area;
+                        melhorPoligono = approx;
+                    }
                 }
             }
-        }
 
-        if (bestCnt) {
-            // Desenha a linha verde "encaixada"
-            ctx.strokeStyle = "#00ff00";
-            ctx.lineWidth = 8;
-            ctx.beginPath();
-            let p1 = { x: bestCnt.data32S[0], y: bestCnt.data32S[1] };
-            ctx.moveTo(p1.x, p1.y);
-            for (let i = 1; i < 4; i++) {
-                ctx.lineTo(bestCnt.data32S[i * 2], bestCnt.data32S[i * 2 + 1]);
+            if (melhorPoligono) {
+                ctx.strokeStyle = "#00ff00";
+                ctx.lineWidth = 10;
+                ctx.beginPath();
+                ctx.moveTo(melhorPoligono.data32S[0], melhorPoligono.data32S[1]);
+                for (let i = 1; i < 4; i++) {
+                    ctx.lineTo(melhorPoligono.data32S[i*2], melhorPoligono.data32S[i*2+1]);
+                }
+                ctx.closePath();
+                ctx.stroke();
             }
-            ctx.closePath();
-            ctx.stroke();
-        }
 
-        src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+            src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+        } catch (e) { console.log("OpenCV busy..."); }
     }
 
-    function processarOMR(qr, imgData) {
+    function processar(qr, imgData) {
         const [aluno, tipo, gab] = qr.data.split('|');
-        const gabarito = gab.split(':')[1];
+        const gabStr = gab.split(':')[1];
         const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
 
-        // Geometria de leitura (Ponto de início Questão 1)
+        // Geometria sincronizada com sua foto
         const startX = qr.location.topLeftCorner.x + (qrSize * 0.22);
         const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.65);
-        const stepH = qrSize * 0.28;
-        const stepV = qrSize * 0.35;
+        const sH = qrSize * 0.28;
+        const sV = qrSize * 0.35;
 
         let acertos = 0;
         let html = "";
 
-        gabarito.split('').forEach((correta, i) => {
+        gabStr.split('').forEach((correta, i) => {
             let escolhida = "Vazio";
-            let maiorEsc = 0;
-
+            let maxE = 0;
             ['A','B','C','D','E'].forEach((letra, col) => {
-                const px = Math.floor(startX + (col * stepH));
-                const py = Math.floor(startY + (i * stepV));
-
-                ctx.fillStyle = "red";
-                ctx.beginPath(); ctx.arc(px, py, 4, 0, 7); ctx.fill();
-
+                const px = Math.floor(startX + (col * sH));
+                const py = Math.floor(startY + (i * sV));
+                
                 const idx = (py * canvas.width + px) * 4;
                 const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
-
-                if (esc > maiorEsc && esc > 70) {
-                    maiorEsc = esc;
-                    escolhida = letra;
-                }
+                
+                if (esc > maxE && esc > 75) { maxE = esc; escolhida = letra; }
             });
             if(escolhida === correta) acertos++;
             html += `<div class="linha-check"><span>Q${i+1}: [${escolhida}]</span><span>${escolhida===correta?'✔':'✘'}</span></div>`;
         });
 
-        // Trava a leitura após encontrar o QR
-        lendo = false;
         document.getElementById('p-nome').innerText = aluno.split(':')[1];
-        document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabarito.length)*10).toFixed(1)}`;
+        document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabStr.length)*10).toFixed(1)}`;
         document.getElementById('p-detalhes').innerHTML = html;
         document.getElementById('painel').style.display = 'block';
     }
