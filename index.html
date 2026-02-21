@@ -1,76 +1,169 @@
-function processarOMR(qr, ctx) {
-    const [alunoPart, tipoPart, gabPart] = qr.data.split('|');
-    const nome = alunoPart.split(':')[1];
-    const gabarito = gabPart.split(':')[1];
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scanner OMR Pro - Calibração Visual</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        :root { --green: #28a745; --blue: #007bff; --red: #dc3545; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #000; color: white; overflow: hidden; }
+        
+        #video { width: 100vw; height: 100vh; object-fit: cover; }
+        
+        .mira-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 40px solid rgba(0,0,0,0.5); box-sizing: border-box; pointer-events: none;
+        }
+        .mira { width: 250px; height: 250px; border: 2px dashed var(--green); border-radius: 15px; }
+        
+        #canvas-debug { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            object-fit: cover; display: none; z-index: 50; 
+        }
 
-    // --- CONFIGURAÇÃO DE CALIBRAÇÃO ---
-    const qrWidth = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
-    const paddingX = qrWidth * 0.55; // Distância horizontal do QR até a 1ª bolinha
-    const distInterQuestao = qrWidth * 0.38; // Distância vertical entre questões
-    const distInterBolinha = qrWidth * 0.22; // Distância horizontal entre A, B, C...
-    // ----------------------------------
+        #painel {
+            position: fixed; bottom: 0; left: 0; right: 0; background: white;
+            color: #333; padding: 25px; border-radius: 25px 25px 0 0;
+            display: none; z-index: 100; max-height: 70vh; overflow-y: auto;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
+        }
+        
+        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .acerto { color: var(--green); font-weight: bold; }
+        .erro { color: var(--red); font-weight: bold; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; margin-top: 15px; cursor: pointer; }
+        .btn-blue { background: var(--blue); color: white; }
+    </style>
+</head>
+<body>
 
-    let acertos = 0;
-    let html = "";
+    <video id="video" playsinline></video>
+    <canvas id="canvas-debug"></canvas>
 
-    // Vamos desenhar no canvas para você ver onde o sensor toca
-    ctx.fillStyle = "red";
+    <div class="mira-container">
+        <div class="mira"></div>
+        <p style="background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; margin-top: 10px;">Enquadre o QR Code</p>
+    </div>
 
-    gabarito.split('').forEach((correta, i) => {
-        let escolhida = "Vazio";
-        let maiorEscuridao = 0;
+    <div id="painel">
+        <p style="margin:0; font-size:11px; color:#777;">ALUNO IDENTIFICADO:</p>
+        <h2 id="p-nome" style="margin:0 0 10px 0; color: var(--blue);"></h2>
+        <div id="p-resumo" style="font-size: 1.2em; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px;"></div>
+        <div id="p-detalhes"></div>
+        <button class="btn btn-blue" onclick="resetar()">PRÓXIMA PROVA</button>
+    </div>
 
-        ['A', 'B', 'C', 'D', 'E'].forEach((letra, index) => {
-            // Cálculo do ponto exato
-            const posX = qr.location.topRightCorner.x + paddingX + (index * distInterBolinha);
-            const posY = qr.location.topRightCorner.y + (i * distInterQuestao) + (qrWidth * 0.1);
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas-debug');
+    const painel = document.getElementById('painel');
+    let lendo = true;
 
-            // Desenha o ponto de leitura no canvas (para debug)
-            ctx.beginPath();
-            ctx.arc(posX, posY, 3, 0, 2 * Math.PI);
-            ctx.fill();
+    async function iniciar() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+            });
+            video.srcObject = stream;
+            video.play();
+            requestAnimationFrame(loop);
+        } catch (err) {
+            alert("Erro ao abrir câmera. Verifique o HTTPS.");
+        }
+    }
 
-            // Análise de Brilho
-            const pixelData = ctx.getImageData(posX, posY, 5, 5).data;
-            let soma = 0;
-            for (let p = 0; p < pixelData.length; p += 4) {
-                soma += (pixelData[p] + pixelData[p+1] + pixelData[p+2]) / 3;
+    function loop() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const qr = jsQR(imgData.data, imgData.width, imgData.height);
+
+            if (qr) {
+                lendo = false;
+                processarOMR(qr, ctx);
             }
-            const brilho = soma / (pixelData.length / 4);
-            const escuridao = 255 - brilho;
+        }
+        if(lendo) requestAnimationFrame(loop);
+    }
 
-            if (escuridao > maiorEscuridao && escuridao > 60) {
-                maiorEscuridao = escuridao;
-                escolhida = letra;
-            }
+    function processarOMR(qr, ctx) {
+        const [alunoPart, tipoPart, gabPart] = qr.data.split('|');
+        const nome = alunoPart.split(':')[1];
+        const gabarito = gabPart.split(':')[1];
+
+        // --- CALIBRAÇÃO GEOMÉTRICA ---
+        const qrWidth = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
+        const padX = qrWidth * 0.55;  // Distância do QR até a coluna A
+        const stepX = qrWidth * 0.22; // Distância entre colunas A->B->C
+        const stepY = qrWidth * 0.38; // Distância entre linhas Q1->Q2
+        const offsetY = qrWidth * 0.1; // Ajuste fino vertical
+        // -----------------------------
+
+        let acertos = 0;
+        let html = "";
+
+        // Desenhar pontos de debug no Canvas
+        ctx.fillStyle = "red";
+        
+        gabarito.split('').forEach((correta, i) => {
+            let escolhida = "Vazio";
+            let maiorEscuridao = 0;
+
+            ['A', 'B', 'C', 'D', 'E'].forEach((letra, colIndex) => {
+                const posX = qr.location.topRightCorner.x + padX + (colIndex * stepX);
+                const posY = qr.location.topRightCorner.y + (i * stepY) + offsetY;
+
+                // Desenha ponto visual
+                ctx.beginPath(); ctx.arc(posX, posY, 4, 0, 7); ctx.fill();
+
+                // Analisar Escuridão (OMR)
+                const sample = ctx.getImageData(posX - 2, posY - 2, 5, 5).data;
+                let brilho = 0;
+                for (let p = 0; p < sample.length; p += 4) {
+                    brilho += (sample[p] + sample[p+1] + sample[p+2]) / 3;
+                }
+                brilho /= (sample.length / 4);
+                const escuridao = 255 - brilho;
+
+                if (escuridao > maiorEscuridao && escuridao > 60) {
+                    maiorEscuridao = escuridao;
+                    escolhida = letra;
+                }
+            });
+
+            const status = (escolhida === correta);
+            if(status) acertos++;
+            html += `<div class="linha-check">
+                        <span>Q${i+1}: Marcou [${escolhida}]</span>
+                        <span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘ ('+correta+')'}</span>
+                     </div>`;
         });
 
-        const status = (escolhida === correta);
-        if(status) acertos++;
+        // Feedback Visual: Mostra onde o sensor "bateu"
+        canvas.style.display = "block";
+        if (navigator.vibrate) navigator.vibrate(200);
 
-        html += `
-            <div class="linha-check">
-                <span>Q${i+1}: [${escolhida}]</span>
-                <span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span>
-            </div>`;
-    });
+        setTimeout(() => {
+            canvas.style.display = "none";
+            document.getElementById('p-nome').innerText = nome;
+            document.getElementById('p-resumo').innerText = `Nota: ${((acertos/gabarito.length)*10).toFixed(1)} (${acertos}/${gabarito.length})`;
+            document.getElementById('p-detalhes').innerHTML = html;
+            painel.style.display = 'block';
+        }, 1200);
+    }
 
-    // Mostra o canvas de debug por 2 segundos para você ver os pontos vermelhos
-    document.getElementById('canvas').style.display = "block";
-    document.getElementById('canvas').style.position = "fixed";
-    document.getElementById('canvas').style.top = "0";
-    document.getElementById('canvas').style.width = "100%";
-    
-    setTimeout(() => {
-        document.getElementById('canvas').style.display = "none";
-        exibirPainel(nome, acertos, gabarito.length, html);
-    }, 1000);
-}
+    function resetar() {
+        painel.style.display = 'none';
+        lendo = true;
+        requestAnimationFrame(loop);
+    }
 
-function exibirPainel(nome, acertos, total, html) {
-    const nota = ((acertos / total) * 10).toFixed(1);
-    document.getElementById('p-nome').innerText = nome;
-    document.getElementById('p-resumo').innerText = `Nota: ${nota}`;
-    document.getElementById('p-detalhes').innerHTML = html;
-    document.getElementById('painel').style.display = 'block';
-}
+    iniciar();
+</script>
+</body>
+</html>
