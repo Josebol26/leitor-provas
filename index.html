@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - 90 Questões</title>
+    <title>Scanner OMR 90Q - Full Scan</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; color: white; }
+        body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
-        .painel { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.85); padding: 15px; border-radius: 15px; width: 85%; border: 1px solid #28a745; z-index: 10; }
-        .nota { font-size: 28px; color: #28a745; font-weight: bold; margin: 5px 0; }
-        .info { font-size: 14px; color: #eee; text-transform: uppercase; letter-spacing: 1px; }
-        #status { font-weight: bold; color: #ffc107; margin-bottom: 5px; }
+        .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
+                  background: rgba(0,0,0,0.9); padding: 15px; border-radius: 12px; width: 90%; 
+                  border: 2px solid #28a745; color: white; text-align: center; z-index: 100; }
+        .nota { font-size: 32px; color: #28a745; font-weight: bold; }
+        .debug { font-size: 10px; color: #aaa; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -22,9 +22,10 @@
     <canvas id="canvas"></canvas>
 
     <div class="painel">
-        <div id="status">MIRAR NO QR CODE</div>
-        <div id="resultado-nome" class="info">Aguardando...</div>
-        <div id="resultado-nota" class="nota">-- / --</div>
+        <div id="status" style="color:#ffc107">AGUARDANDO QR CODE...</div>
+        <div id="res-nome" style="font-size:14px; margin: 5px 0;">---</div>
+        <div id="res-nota" class="nota">00 / 00</div>
+        <div id="debug-info" class="debug">Gabarito: detectando...</div>
     </div>
 
     <script>
@@ -32,19 +33,18 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
-        // --- GEOMETRIA CALIBRADA PARA 3 COLUNAS ---
+        // CALIBRAÇÃO 3 COLUNAS (30 questões por coluna)
         const config = {
             offsetX: 0.10,    
             offsetY: 1.50,    
             gapH: 0.215,      
             gapV: 0.155,      
             colGap: 1.30,     
-            threshold: 165    // Ajuste se ele não ler as marcas (160-180)
+            threshold: 165    
         };
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
-            video.srcObject = stream;
-            video.setAttribute("playsinline", true);
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
+            video.srcObject = s;
             video.play();
             requestAnimationFrame(tick);
         });
@@ -54,92 +54,79 @@
                 canvas.height = video.videoHeight;
                 canvas.width = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imgData.data, imgData.width, imgData.height);
 
                 if (code) {
-                    desenharMoldura(code.location);
-                    processarOMR(code);
+                    processarCompleto(code);
                 }
             }
             requestAnimationFrame(tick);
         }
 
-        function desenharMoldura(loc) {
-            ctx.beginPath();
-            ctx.lineWidth = 5;
-            ctx.strokeStyle = "#28a745";
-            ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
-            ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
-            ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
-            ctx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
-            ctx.closePath();
-            ctx.stroke();
-        }
+        function processarCompleto(qr) {
+            // Desenha borda no QR
+            ctx.lineWidth = 4; ctx.strokeStyle = "yellow";
+            ctx.strokeRect(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y, 
+                           qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 
+                           qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y);
 
-        function processarOMR(qr) {
-            const partes = qr.data.split('|');
-            if (partes.length < 3) return;
+            // Extração robusta dos dados
+            const rawData = qr.data;
+            const matchGab = rawData.match(/GAB:([A-E]+)/);
+            const matchNome = rawData.match(/ALUNO:([^|]+)/);
 
-            const nome = partes[0].replace("ALUNO:", "");
-            const gabarito = partes[2].replace("GAB:", "");
-            const totalQ = gabarito.length; // Aqui ele pega o tamanho real do gabarito (ex: 90)
+            if (!matchGab) {
+                document.getElementById('status').innerText = "QR INVÁLIDO (SEM GABARITO)";
+                return;
+            }
+
+            const gabarito = matchGab[1];
+            const nome = matchNome ? matchNome[1] : "Desconhecido";
+            const totalQ = gabarito.length; // Aqui garantimos que ele lê até 90 se o gabarito tiver 90
 
             const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
             const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
 
             let acertos = 0;
 
-            // FOR LOOP percorrendo TODAS as questões do gabarito
+            // LOOP TOTAL
             for (let i = 0; i < totalQ; i++) {
-                const numColuna = Math.floor(i / 30); 
-                const linhaNaCol = i % 30;
+                const col = Math.floor(i / 30);
+                const lin = i % 30;
 
-                const posX = config.offsetX + (numColuna * config.colGap);
-                const posY = config.offsetY + (linhaNaCol * config.gapV);
+                const posX = config.offsetX + (col * config.colGap);
+                const posY = config.offsetY + (lin * config.gapV);
 
-                let marcadaIndex = -1;
-                let maxEscuridao = 0;
+                let escolhida = -1;
+                let maxEsc = 0;
 
                 for (let alt = 0; alt < 5; alt++) {
                     const x = qr.location.topLeftCorner.x + qrW * (posX + (alt * config.gapH));
                     const y = qr.location.topLeftCorner.y + qrH * posY;
 
-                    // Verifica se o ponto está dentro da imagem para evitar erro
-                    if(x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
+                    // Sensor de escuridão
+                    const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+                    const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
-                    const escuridao = calcEscuridao(x, y);
+                    // Feedback visual
+                    ctx.fillStyle = esc > config.threshold ? "red" : "lime";
+                    ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill();
 
-                    // Desenho dos pontos de feedback
-                    ctx.fillStyle = escuridao > config.threshold ? "#ff4444" : "#00ff00";
-                    ctx.beginPath();
-                    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    if (escuridao > config.threshold && escuridao > maxEscuridao) {
-                        maxEscuridao = escuridao;
-                        marcadaIndex = alt;
+                    if (esc > config.threshold && esc > maxEsc) {
+                        maxEsc = esc; escolhida = alt;
                     }
                 }
 
-                const letraMarcada = marcadaIndex !== -1 ? String.fromCharCode(65 + marcadaIndex) : null;
-                if (letraMarcada === gabarito[i]) {
+                if (escolhida !== -1 && String.fromCharCode(65 + escolhida) === gabarito[i]) {
                     acertos++;
                 }
             }
 
-            // Atualiza a tela
-            document.getElementById('status').innerText = "PROVA IDENTIFICADA";
-            document.getElementById('resultado-nome').innerText = nome;
-            document.getElementById('resultado-nota').innerText = `${acertos} / ${totalQ}`;
-        }
-
-        function calcEscuridao(x, y) {
-            const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-            // Luminância ponderada para melhor precisão (escuridão = 255 - brilho)
-            const brilho = (0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]);
-            return 255 - brilho;
+            document.getElementById('status').innerText = "✅ SCAN COMPLETO";
+            document.getElementById('res-nome').innerText = nome;
+            document.getElementById('res-nota').innerText = `${acertos} / ${totalQ}`;
+            document.getElementById('debug-info').innerText = `Processadas: ${totalQ} questões`;
         }
     </script>
 </body>
