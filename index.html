@@ -112,15 +112,22 @@ function capturar(){
 // =========================
 function lerQR(imageData){
 
+    // Converter para escala de cinza
+    let data = imageData.data;
+
+    for(let i = 0; i < data.length; i += 4){
+        let media = (data[i] + data[i+1] + data[i+2]) / 3;
+        data[i] = data[i+1] = data[i+2] = media > 120 ? 255 : 0;
+    }
+
     const code = jsQR(
-        imageData.data,
+        data,
         imageData.width,
         imageData.height
     );
 
     return code ? code.data : "QR não encontrado";
 }
-
 // =========================
 // LER OMR
 // =========================
