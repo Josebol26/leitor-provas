@@ -3,107 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Calibrador OMR - Realtime</title>
+    <title>Scanner OMR Pro - Calibrado</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #000; overflow: hidden; color: white; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
         
-        /* Painel de Calibração */
-        #debug-panel { 
-            position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
-            color: #0f0; padding: 15px; border-radius: 10px; z-index: 100; font-size: 12px;
-            border: 1px solid #0f0; font-family: monospace;
-        }
-        .control-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 10px; }
-        .control-row button { padding: 5px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
-        
+        /* Botão de captura principal */
         #btn-disparo { 
             position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
-            padding: 22px 40px; background: #28a745; color: white; border: none;
+            padding: 20px 45px; background: #28a745; color: white; border: none;
             border-radius: 50px; font-weight: bold; font-size: 18px; z-index: 100;
+            box-shadow: 0 0 20px rgba(0,0,0,0.6); border: 2px solid #fff;
+            display: block;
         }
 
-        #status { position: fixed; top: 20px; left: 20px; z-index: 20; color: white; font-size: 12px; text-shadow: 1px 1px 2px black; }
+        /* Área de botões após o scan */
+        .area-botoes-pos { position: fixed; bottom: 40px; left: 0; right: 0; display: none; justify-content: center; gap: 15px; z-index: 101; }
+        .btn-pos { padding: 18px 25px; border: none; border-radius: 50px; font-weight: bold; color: white; font-size: 16px; cursor: pointer; }
+
+        /* Painel de Resultados */
+        #painel { 
+            position: fixed; bottom: 0; left: 0; right: 0; background: white; 
+            padding: 25px; border-radius: 25px 25px 0 0; display: none; 
+            z-index: 110; color: #333; max-height: 75vh; overflow-y: auto; 
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.3);
+        }
+
+        #status { 
+            position: fixed; top: 20px; width: 100%; text-align: center; 
+            z-index: 20; font-size: 14px; font-weight: bold; 
+            text-shadow: 1px 1px 3px black; letter-spacing: 1px;
+        }
+
+        .resultado-linha {
+            display: flex; justify-content: space-between; padding: 10px;
+            border-bottom: 1px solid #eee; font-family: monospace;
+        }
     </style>
 </head>
 <body>
 
-    <div id="status">BUSCANDO QR CODE...</div>
+    <div id="status">INICIANDO CÂMERA...</div>
+    
+    <button id="btn-disparo" onclick="capturarEProcessar()">📸 CAPTURAR PROVA</button>
 
-    <div id="debug-panel">
-        <div style="text-align:center; font-weight:bold; margin-bottom:10px;">AJUSTE DE PRECISÃO</div>
-        <div class="control-row">
-            <span>X: <b id="val-offsetX">0</b></span>
-            <div>
-                <button onclick="ajustar('offsetX', -0.01)">-</button>
-                <button onclick="ajustar('offsetX', 0.01)">+</button>
-            </div>
-        </div>
-        <div class="control-row">
-            <span>Y: <b id="val-offsetY">0</b></span>
-            <div>
-                <button onclick="ajustar('offsetY', -0.01)">-</button>
-                <button onclick="ajustar('offsetY', 0.01)">+</button>
-            </div>
-        </div>
-        <div class="control-row">
-            <span>gapH: <b id="val-gapH">0</b></span>
-            <div>
-                <button onclick="ajustar('gapH', -0.005)">-</button>
-                <button onclick="ajustar('gapH', 0.005)">+</button>
-            </div>
-        </div>
-        <div class="control-row">
-            <span>gapV: <b id="val-gapV">0</b></span>
-            <div>
-                <button onclick="ajustar('gapV', -0.005)">-</button>
-                <button onclick="ajustar('gapV', 0.005)">+</button>
-            </div>
-        </div>
-        <hr>
-        <div style="font-size: 10px; color: #fff;">Mova os pontos até o centro das bolinhas.</div>
+    <div class="area-botoes-pos" id="pos-botoes">
+        <button class="btn-pos" style="background:#dc3545;" onclick="resetar()">🔄 REPETIR</button>
+        <button class="btn-pos" style="background:#007bff;" onclick="exibirResultado()">✅ VER NOTA</button>
     </div>
-
-    <button id="btn-disparo" onclick="alert('Valores atuais: \n' + JSON.stringify(CONFIG))">VER VALORES FINAIS</button>
 
     <video id="video" playsinline style="display:none;"></video>
     <canvas id="canvas-ui"></canvas>
+
+    <div id="painel">
+        <h2 id="p-nome" style="margin:0; color: #007bff; text-align: center;"></h2>
+        <div id="p-detalhes" style="margin: 20px 0;"></div>
+        <button style="width:100%; padding:20px; background:#333; color:white; border:none; border-radius:15px; font-weight:bold; font-size: 16px;" onclick="resetar()">PRÓXIMA PROVA</button>
+    </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
+    const btnDisparo = document.getElementById('btn-disparo');
+    const posBotoes = document.getElementById('pos-botoes');
     const statusTxt = document.getElementById('status');
     
-    // Valores iniciais para começar a calibração
-    let CONFIG = { offsetX: -0.12, offsetY: 1.42, gapH: 0.35, gapV: 0.28 };
+    // --- SEUS VALORES CALIBRADOS ---
+    const CONFIG = { offsetX: 0.10, offsetY: 1.50, gapH: 0.245, gapV: 0.205 };
 
-    function atualizarDisplay() {
-        document.getElementById('val-offsetX').innerText = CONFIG.offsetX.toFixed(2);
-        document.getElementById('val-offsetY').innerText = CONFIG.offsetY.toFixed(2);
-        document.getElementById('val-gapH').innerText = CONFIG.gapH.toFixed(3);
-        document.getElementById('val-gapV').innerText = CONFIG.gapV.toFixed(3);
-    }
-
-    function ajustar(chave, valor) {
-        CONFIG[chave] += valor;
-        atualizarDisplay();
-    }
+    let monitorando = true;
+    let cacheResultado = null;
+    let ultimaDeteccaoValida = null;
 
     async function iniciar() {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment", width: { ideal: 1280 } } 
-        });
-        video.srcObject = stream;
-        video.play();
-        atualizarDisplay();
-        requestAnimationFrame(loop);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment", width: { ideal: 1280 } } 
+            });
+            video.srcObject = stream;
+            video.play();
+            requestAnimationFrame(loop);
+        } catch (err) {
+            statusTxt.innerText = "ERRO AO ACESSAR CÂMERA";
+            console.error(err);
+        }
     }
 
     function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && monitorando) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
@@ -112,20 +102,21 @@
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                try {
-                    const pontos = calcularPontos(qr);
-                    desenharInterface(qr, pontos);
-                    statusTxt.innerText = "SINAL OK - CALIBRANDO...";
-                    statusTxt.style.color = "#00ff00";
-                } catch(e) { 
-                    statusTxt.innerText = "ERRO NA STRING DO QR"; 
-                }
+                const pontos = calcularPontos(qr);
+                desenharInterface(qr, pontos);
+                ultimaDeteccaoValida = { qr, pontos };
+                statusTxt.innerText = "PRONTO PARA LEITURA";
+                statusTxt.style.color = "#00ff00";
+            } else if (ultimaDeteccaoValida) {
+                statusTxt.innerText = "SINAL FRACO - REPOSICIONE";
+                statusTxt.style.color = "#ffaa00";
+                desenharInterface(ultimaDeteccaoValida.qr, ultimaDeteccaoValida.pontos);
             } else {
                 statusTxt.innerText = "BUSCANDO QR CODE...";
                 statusTxt.style.color = "#ff4444";
             }
         }
-        requestAnimationFrame(loop);
+        if (monitorando) requestAnimationFrame(loop);
     }
 
     function calcularPontos(qr) {
@@ -133,48 +124,100 @@
         const tr = qr.location.topRightCorner;
         const bl = qr.location.bottomLeftCorner;
         
-        // Tamanho base do QR para escala
         const qrSize = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
         const vX = { x: (tr.x - tl.x) / qrSize, y: (tr.y - tl.y) / qrSize };
         const vY = { x: (bl.x - tl.x) / qrSize, y: (bl.y - tl.y) / qrSize };
 
-        // Pega o gabarito apenas para saber a quantidade de questões
-        const gabParte = qr.data.split('|')[2];
-        const gabarito = gabParte ? gabParte.split(':')[1] : "AAAAA"; 
+        // Extrair gabarito da string: ALUNO:Nome|MAT:Prova|GAB:ABCDE...
+        const partes = qr.data.split('|');
+        const gabarito = partes[2] ? partes[2].split(':')[1] : "";
 
         let lista = [];
         for (let i = 0; i < gabarito.length; i++) {
             for (let col = 0; col < 5; col++) {
-                // FÓRMULA MÁGICA DE POSICIONAMENTO
                 const px = tl.x + (vX.x * (CONFIG.offsetX + col * CONFIG.gapH) * qrSize) + (vY.x * (CONFIG.offsetY + i * CONFIG.gapV) * qrSize);
                 const py = tl.y + (vX.y * (CONFIG.offsetX + col * CONFIG.gapH) * qrSize) + (vY.y * (CONFIG.offsetY + i * CONFIG.gapV) * qrSize);
-                lista.push({ x: px, y: py });
+                lista.push({ x: px, y: py, qIdx: i, letra: ['A','B','C','D','E'][col], resp: gabarito[i] });
             }
         }
         return lista;
     }
 
     function desenharInterface(qr, pontos) {
-        // Desenha borda do QR
+        // Moldura do QR
         ctx.strokeStyle = "#00ff00";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y);
-        ctx.lineTo(qr.location.topRightCorner.x, qr.location.topRightCorner.y);
-        ctx.lineTo(qr.location.bottomRightCorner.x, qr.location.bottomRightCorner.y);
-        ctx.lineTo(qr.location.bottomLeftCorner.x, qr.location.bottomLeftCorner.y);
-        ctx.closePath();
-        ctx.stroke();
+        ctx.lineWidth = 4;
+        ctx.strokeRect(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y, 15, 15);
         
-        // Desenha pontos de leitura
+        // Pontos de Leitura (Mira)
         pontos.forEach(p => {
-            ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // Vermelho para ver melhor o erro
-            ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 7); ctx.fill();
-            // Círculo verde em volta do ponto
-            ctx.strokeStyle = "#0f0";
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.stroke();
+            ctx.fillStyle = "rgba(0, 255, 0, 0.5)";
+            ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
         });
+    }
+
+    function capturarEProcessar() {
+        if (!ultimaDeteccaoValida) return;
+
+        monitorando = false;
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const { qr, pontos } = ultimaDeteccaoValida;
+        const gabarito = qr.data.split('|')[2].split(':')[1];
+
+        let marcadas = new Array(gabarito.length).fill("---");
+        let maiorInt = new Array(gabarito.length).fill(0);
+
+        pontos.forEach(p => {
+            const x = Math.floor(p.x);
+            const y = Math.floor(p.y);
+            if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+                const idx = (y * canvas.width + x) * 4;
+                // Cálculo de luminância (quão escuro é o ponto)
+                const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
+                
+                if (esc > maiorInt[p.qIdx] && esc > 80) { // Sensibilidade: 80
+                    maiorInt[p.qIdx] = esc;
+                    marcadas[p.qIdx] = p.letra;
+                }
+            }
+        });
+
+        let acertos = 0;
+        let html = "";
+        marcadas.forEach((m, i) => {
+            const correta = gabarito[i];
+            const isOk = (m === correta);
+            if (isOk) acertos++;
+            html += `
+                <div class="resultado-linha">
+                    <span>QUESTÃO ${i+1}: <b>[${m}]</b></span>
+                    <span style="color:${isOk?'green':'red'}">${isOk?'✅ OK':'❌ '+correta}</span>
+                </div>`;
+        });
+
+        cacheResultado = {
+            nome: qr.data.split('|')[0].split(':')[1],
+            html: `<div style="text-align:center;"><h2>NOTA: ${acertos} de ${gabarito.length}</h2></div><br>${html}`
+        };
+
+        btnDisparo.style.display = 'none';
+        posBotoes.style.display = 'flex';
+    }
+
+    function exibirResultado() {
+        document.getElementById('p-nome').innerText = cacheResultado.nome;
+        document.getElementById('p-detalhes').innerHTML = cacheResultado.html;
+        document.getElementById('painel').style.display = 'block';
+        posBotoes.style.display = 'none';
+    }
+
+    function resetar() {
+        document.getElementById('painel').style.display = 'none';
+        posBotoes.style.display = 'none';
+        btnDisparo.style.display = 'block';
+        monitorando = true;
+        ultimaDeteccaoValida = null;
+        requestAnimationFrame(loop);
     }
 
     iniciar();
