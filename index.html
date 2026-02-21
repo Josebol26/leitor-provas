@@ -3,34 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Modo Congelar</title>
+    <title>Scanner OMR - Gatilho Inteligente</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
         
-        #msg { position: fixed; top: 20px; width: 70%; left: 15%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 50px; }
+        #msg { position: fixed; top: 20px; width: 70%; left: 15%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 50px; border: 2px solid #fff; transition: all 0.3s; }
         
-        .botoes-flutuantes { 
-            position: fixed; bottom: 40px; left: 0; right: 0; 
-            display: none; justify-content: center; gap: 10px; z-index: 100; 
-        }
-        
-        #btn-capturar { padding: 20px 30px; background: #28a745; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        #btn-repetir { padding: 20px 30px; background: #dc3545; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; }
+        .botoes-flutuantes { position: fixed; bottom: 40px; left: 0; right: 0; display: none; justify-content: center; gap: 15px; z-index: 100; }
+        #btn-capturar { padding: 20px 30px; background: #28a745; color: white; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px #000; }
+        #btn-repetir { padding: 20px 30px; background: #dc3545; color: white; border: none; border-radius: 50px; font-weight: bold; }
 
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 110; color: #333; max-height: 80vh; overflow-y: auto; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+        
+        /* Mira de Enquadramento */
+        .mira-omr { 
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 85vw; height: 70vh; border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 15px; pointer-events: none; z-index: 5;
+        }
     </style>
 </head>
 <body>
 
-    <div id="msg">Aguardando QR Code...</div>
+    <div id="msg">ENQUADRE O QR CODE NA MIRA</div>
+    <div class="mira-omr" id="mira"></div>
     
     <div class="botoes-flutuantes" id="area-botoes">
-        <button id="btn-repetir" onclick="descongelar()">REPETIR 🔄</button>
-        <button id="btn-capturar" onclick="processarAgora()">CONFERIR NOTA ✅</button>
+        <button id="btn-repetir" onclick="descongelar()">🔄 TENTAR DE NOVO</button>
+        <button id="btn-capturar" onclick="processarAgora()">✅ CONFERIR NOTA</button>
     </div>
 
     <video id="video" playsinline style="display:none;"></video>
@@ -47,12 +50,15 @@
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
+    const mira = document.getElementById('mira');
     const areaBotoes = document.getElementById('area-botoes');
     
+    // SEUS VALORES CALIBRADOS
     const CONFIG = { offsetX: -0.12, offsetY: 1.42, gapH: 0.35, gapV: 0.28 };
 
-    let estado = "PROCURANDO"; // PROCURANDO, CONGELADO, RESULTADO
+    let estado = "PROCURANDO";
     let cacheLeitura = null;
+    let tempoAlinhado = 0;
 
     async function iniciarCamera() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -73,17 +79,42 @@
                 const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
+                // LÓGICA DE GATILHO INTELIGENTE
                 if (qr) {
-                    // CONGELAR!
-                    estado = "CONGELADO";
-                    const pontos = calcularPontos(qr);
-                    desenharInterface(pontos);
-                    cacheLeitura = { qr, imgData, pontos };
+                    // Verifica se o QR está na parte superior (alinhamento básico)
+                    const qrCentroX = qr.location.topLeftCorner.x;
+                    const qrCentroY = qr.location.topLeftCorner.y;
                     
-                    msg.innerText = "IMAGEM CONGELADA";
-                    areaBotoes.style.display = 'flex';
+                    // Se o QR estiver muito na borda ou inclinado, pede ajuste
+                    if (qrCentroY > canvas.height * 0.4) {
+                        msg.innerText = "SUBA MAIS O CELULAR";
+                        msg.style.background = "rgba(255, 165, 0, 0.8)";
+                        tempoAlinhado = 0;
+                    } else {
+                        tempoAlinhado++;
+                        msg.innerText = "MANTENHA PARADO... " + Math.round((tempoAlinhado/30)*100) + "%";
+                        msg.style.background = "rgba(0, 123, 255, 0.8)";
+                        mira.style.borderColor = "#007bff";
+
+                        // Só congela após 30 frames (~1 segundo) de estabilidade
+                        if (tempoAlinhado > 30) {
+                            estado = "CONGELADO";
+                            const pontos = calcularPontos(qr);
+                            desenharInterface(pontos);
+                            cacheLeitura = { qr, imgData, pontos };
+                            
+                            msg.innerText = "FOTO CAPTURADA!";
+                            msg.style.background = "#28a745";
+                            mira.style.display = 'none';
+                            areaBotoes.style.display = 'flex';
+                        }
+                    }
                 } else {
-                    msg.innerText = "APONTE PARA O QR CODE";
+                    tempoAlinhado = 0;
+                    msg.innerText = "ENQUADRE O QR CODE NO TOPO";
+                    msg.style.background = "rgba(0,0,0,0.8)";
+                    mira.style.borderColor = "rgba(255,255,255,0.3)";
+                    mira.style.display = 'block';
                 }
             }
         }
@@ -121,7 +152,7 @@
     function descongelar() {
         estado = "PROCURANDO";
         areaBotoes.style.display = 'none';
-        cacheLeitura = null;
+        tempoAlinhado = 0;
     }
 
     function processarAgora() {
@@ -147,17 +178,19 @@
         let html = "";
         marcadas.forEach((m, i) => {
             if (m === gabarito[i]) acertos++;
-            html += `<div class="linha-check"><span>Q${i+1}: [${m}]</span> <span>${m===gabarito[i]?'✅':'❌'}</span></div>`;
+            html += `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #eee;"><span>Q${i+1}: [${m}]</span> <span>${m===gabarito[i]?'✅':'❌'}</span></div>`;
         });
 
         document.getElementById('p-nome').innerText = qr.data.split('|')[0].split(':')[1];
-        document.getElementById('p-detalhes').innerHTML = `<h1>${acertos}/${gabarito.length}</h1><hr>${html}`;
+        // Mostra nota como fração conforme sua instrução inicial
+        document.getElementById('p-detalhes').innerHTML = `<h1 style="text-align:center;">${acertos}/${gabarito.length}</h1><hr>${html}`;
         document.getElementById('painel').style.display = 'block';
     }
 
     function resetarTudo() {
         document.getElementById('painel').style.display = 'none';
         estado = "PROCURANDO";
+        tempoAlinhado = 0;
         requestAnimationFrame(loop);
     }
 
