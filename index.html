@@ -3,39 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Oficial</title>
+    <title>Scanner OMR - Modo Congelar</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
-        #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
+        #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
         
-        #msg { position: fixed; top: 20px; width: 70%; left: 15%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 50px; border: 1px solid #444; }
+        #msg { position: fixed; top: 20px; width: 70%; left: 15%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 50px; }
         
-        #btn-capturar { 
-            position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
-            padding: 20px 50px; background: #28a745; color: white; border: none;
-            border-radius: 50px; font-weight: bold; font-size: 18px; z-index: 100;
-            display: none; box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+        .botoes-flutuantes { 
+            position: fixed; bottom: 40px; left: 0; right: 0; 
+            display: none; justify-content: center; gap: 10px; z-index: 100; 
         }
+        
+        #btn-capturar { padding: 20px 30px; background: #28a745; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        #btn-repetir { padding: 20px 30px; background: #dc3545; color: white; border: none; border-radius: 50px; font-weight: bold; font-size: 16px; }
 
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 110; color: #333; max-height: 80vh; overflow-y: auto; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
-        .btn-reset { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; margin-top: 15px; }
+        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
     </style>
 </head>
 <body>
 
-    <div id="msg">APONTE PARA O QR CODE</div>
-    <button id="btn-capturar" onclick="processarAgora()">CONFERIR NOTA</button>
+    <div id="msg">Aguardando QR Code...</div>
+    
+    <div class="botoes-flutuantes" id="area-botoes">
+        <button id="btn-repetir" onclick="descongelar()">REPETIR 🔄</button>
+        <button id="btn-capturar" onclick="processarAgora()">CONFERIR NOTA ✅</button>
+    </div>
 
-    <video id="video" playsinline></video>
+    <video id="video" playsinline style="display:none;"></video>
     <canvas id="canvas-ui"></canvas>
 
     <div id="painel">
         <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
         <div id="p-detalhes" style="margin: 15px 0;"></div>
-        <button class="btn-reset" onclick="resetar()">PRÓXIMA PROVA</button>
+        <button style="width:100%; padding:20px; background:#007bff; color:white; border:none; border-radius:15px; font-weight:bold;" onclick="resetarTudo()">PRÓXIMA PROVA</button>
     </div>
 
 <script>
@@ -43,52 +47,47 @@
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
-    const btnCapturar = document.getElementById('btn-capturar');
+    const areaBotoes = document.getElementById('area-botoes');
     
-    // --- VALORES CALIBRADOS POR VOCÊ ---
-    const CONFIG = {
-        offsetX: -0.12, 
-        offsetY: 1.42, 
-        gapH: 0.35,    
-        gapV: 0.28
-    };
+    const CONFIG = { offsetX: -0.12, offsetY: 1.42, gapH: 0.35, gapV: 0.28 };
 
-    let ativo = true;
+    let estado = "PROCURANDO"; // PROCURANDO, CONGELADO, RESULTADO
     let cacheLeitura = null;
 
     async function iniciarCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", width: { ideal: 1280 } } 
-            });
-            video.srcObject = stream;
-            video.play();
-            requestAnimationFrame(loop);
-        } catch (e) { alert("Erro ao acessar câmera."); }
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "environment", width: { ideal: 1280 } } 
+        });
+        video.srcObject = stream;
+        video.play();
+        requestAnimationFrame(loop);
     }
 
     function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && ativo) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            if (estado === "PROCURANDO") {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0);
 
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const qr = jsQR(imgData.data, imgData.width, imgData.height);
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
-            if (qr) {
-                msg.innerText = "ALINHAMENTO OK";
-                btnCapturar.style.display = 'block';
-                const pontos = calcularPontos(qr);
-                desenharInterface(pontos);
-                cacheLeitura = { qr, imgData, pontos };
-            } else {
-                msg.innerText = "BUSCANDO QR CODE...";
-                btnCapturar.style.display = 'none';
-                cacheLeitura = null;
+                if (qr) {
+                    // CONGELAR!
+                    estado = "CONGELADO";
+                    const pontos = calcularPontos(qr);
+                    desenharInterface(pontos);
+                    cacheLeitura = { qr, imgData, pontos };
+                    
+                    msg.innerText = "IMAGEM CONGELADA";
+                    areaBotoes.style.display = 'flex';
+                } else {
+                    msg.innerText = "APONTE PARA O QR CODE";
+                }
             }
         }
-        if(ativo) requestAnimationFrame(loop);
+        if (estado !== "RESULTADO") requestAnimationFrame(loop);
     }
 
     function calcularPontos(qr) {
@@ -96,13 +95,11 @@
         const tr = qr.location.topRightCorner;
         const bl = qr.location.bottomLeftCorner;
         const qrSize = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
-        
         const vX = { x: (tr.x - tl.x) / qrSize, y: (tr.y - tl.y) / qrSize };
         const vY = { x: (bl.x - tl.x) / qrSize, y: (bl.y - tl.y) / qrSize };
 
         const gabarito = qr.data.split('|')[2].split(':')[1];
         let lista = [];
-
         for (let i = 0; i < gabarito.length; i++) {
             for (let col = 0; col < 5; col++) {
                 const px = tl.x + (vX.x * (CONFIG.offsetX + col * CONFIG.gapH) * qrSize) + (vY.x * (CONFIG.offsetY + i * CONFIG.gapV) * qrSize);
@@ -115,49 +112,52 @@
 
     function desenharInterface(pontos) {
         pontos.forEach(p => {
-            ctx.fillStyle = "rgba(0, 255, 0, 0.6)"; // Verde suave para não atrapalhar
-            ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
-            ctx.strokeStyle = "white"; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = "rgba(0, 255, 0, 0.7)";
+            ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
+            ctx.strokeStyle = "white"; ctx.stroke();
         });
+    }
+
+    function descongelar() {
+        estado = "PROCURANDO";
+        areaBotoes.style.display = 'none';
+        cacheLeitura = null;
     }
 
     function processarAgora() {
         if (!cacheLeitura) return;
-        ativo = false;
+        estado = "RESULTADO";
+        areaBotoes.style.display = 'none';
 
         const { qr, imgData, pontos } = cacheLeitura;
         const gabarito = qr.data.split('|')[2].split(':')[1];
         let marcadas = new Array(gabarito.length).fill("Vazio");
-        let maiorIntensidade = new Array(gabarito.length).fill(0);
+        let maiorInt = new Array(gabarito.length).fill(0);
 
         pontos.forEach(p => {
             const idx = (Math.floor(p.y) * canvas.width + Math.floor(p.x)) * 4;
-            const escuridao = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
-
-            if (escuridao > maiorIntensidade[p.qIdx] && escuridao > 80) {
-                maiorIntensidade[p.qIdx] = escuridao;
+            const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
+            if (esc > maiorInt[p.qIdx] && esc > 80) {
+                maiorInt[p.qIdx] = esc;
                 marcadas[p.qIdx] = p.letra;
             }
         });
 
         let acertos = 0;
-        let listaHtml = "";
+        let html = "";
         marcadas.forEach((m, i) => {
-            const correta = gabarito[i];
-            if (m === correta) acertos++;
-            listaHtml += `<div class="linha-check"><span>Questão ${i+1}: <b>${m}</b></span> <span>${m===correta?'✅':'❌ (Gab: '+correta+')'}</span></div>`;
+            if (m === gabarito[i]) acertos++;
+            html += `<div class="linha-check"><span>Q${i+1}: [${m}]</span> <span>${m===gabarito[i]?'✅':'❌'}</span></div>`;
         });
 
         document.getElementById('p-nome').innerText = qr.data.split('|')[0].split(':')[1];
-        // Nota exibida como fração (numerador/denominador) conforme solicitado
-        document.getElementById('p-detalhes').innerHTML = `<h1 style="text-align:center; margin:10px 0;">${acertos}/${gabarito.length}</h1><hr>${listaHtml}`;
+        document.getElementById('p-detalhes').innerHTML = `<h1>${acertos}/${gabarito.length}</h1><hr>${html}`;
         document.getElementById('painel').style.display = 'block';
-        btnCapturar.style.display = 'none';
     }
 
-    function resetar() {
+    function resetarTudo() {
         document.getElementById('painel').style.display = 'none';
-        ativo = true;
+        estado = "PROCURANDO";
         requestAnimationFrame(loop);
     }
 
