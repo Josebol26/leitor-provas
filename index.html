@@ -3,39 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Versão Final</title>
+    <title>Scanner OMR Pro - Precisão Total</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        :root { --green: #28a745; --blue: #007bff; --red: #dc3545; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #000; color: white; overflow: hidden; }
-        
+        :root { --green: #28a745; --blue: #007bff; }
+        body { font-family: sans-serif; margin: 0; background: #000; color: white; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-debug { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; display: none; z-index: 50; }
-        
-        /* Mira visual para ajudar o professor a centralizar */
-        .mira { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 260px; height: 380px; border: 2px dashed var(--green); 
-            border-radius: 15px; pointer-events: none; z-index: 10;
-        }
-
-        #painel {
-            position: fixed; bottom: 0; left: 0; right: 0; background: white;
-            color: #333; padding: 25px; border-radius: 25px 25px 0 0;
-            display: none; z-index: 100; max-height: 75vh; overflow-y: auto;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
-        }
-        
-        .card-info { border-left: 5px solid var(--blue); padding-left: 15px; margin-bottom: 20px; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .mira { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 250px; height: 350px; border: 2px dashed var(--green); border-radius: 10px; pointer-events: none; }
+        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; color: #333; padding: 25px; border-radius: 20px 20px 0 0; display: none; z-index: 100; max-height: 70vh; overflow-y: auto; }
+        .linha-check { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
         .acerto { color: var(--green); font-weight: bold; }
-        .erro { color: var(--red); font-weight: bold; }
-        
-        .btn-proximo { 
-            width: 100%; padding: 18px; border: none; border-radius: 12px; 
-            background: var(--blue); color: white; font-weight: bold; 
-            font-size: 16px; margin-top: 20px; cursor: pointer; 
-        }
+        .erro { color: #dc3545; font-weight: bold; }
+        button { width: 100%; padding: 15px; background: var(--blue); color: white; border: none; border-radius: 10px; margin-top: 15px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -45,15 +25,10 @@
     <div class="mira"></div>
 
     <div id="painel">
-        <div class="card-info">
-            <p style="margin:0; font-size:12px; color:#777;">ALUNO IDENTIFICADO:</p>
-            <h2 id="p-nome" style="margin:5px 0 0 0; color: var(--blue);"></h2>
-        </div>
-        
-        <p id="p-resumo" style="font-weight: bold; margin: 15px 0; border-bottom: 2px solid #eee; padding-bottom: 10px;"></p>
+        <h2 id="p-nome" style="margin:0; color: var(--blue);"></h2>
+        <p id="p-resumo" style="font-weight: bold; margin: 10px 0;"></p>
         <div id="p-detalhes"></div>
-        
-        <button class="btn-proximo" onclick="resetar()">PRÓXIMA PROVA</button>
+        <button onclick="resetar()">PRÓXIMA PROVA</button>
     </div>
 
 <script>
@@ -63,14 +38,12 @@
     let lendo = true;
 
     async function iniciar() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", width: { ideal: 1280 } } 
-            });
-            video.srcObject = stream;
-            video.play();
-            requestAnimationFrame(loop);
-        } catch (err) { alert("Erro ao acessar câmera: " + err); }
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "environment", width: { ideal: 1280 } } 
+        });
+        video.srcObject = stream;
+        video.play();
+        requestAnimationFrame(loop);
     }
 
     function loop() {
@@ -79,7 +52,6 @@
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
@@ -96,17 +68,20 @@
         const nome = alunoPart.split(':')[1];
         const gabarito = gabPart.split(':')[1];
 
-        // --- GEOMETRIA VERTICAL (BASEADA NO SEU GERADOR) ---
         const qrWidth = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const centerX = (qr.location.bottomLeftCorner.x + qr.location.bottomRightCorner.x) / 2;
         const baseY = qr.location.bottomLeftCorner.y;
 
-        // Proporções recalibradas para o layout vertical
-        const padY = qrWidth * 0.65;    
-        const stepY = qrWidth * 0.32;   
+        // --- CALIBRAÇÃO MATEMÁTICA VIA CSS ---
+        // padY: Pula o texto "SCANNER OMR" (20px no gerador = 0.20 do QR)
+        const padY = qrWidth * 0.45;    
+        // stepY: Fonte 12px + Gap 8px (20px no gerador = 0.20 do QR)
+        const stepY = qrWidth * 0.22;   
+        // stepX: Bolinha 16px + Margens 8px (24px no gerador = 0.24 do QR)
         const stepX = qrWidth * 0.28;   
-        const offsetX = -(stepX * 2);   
-        // ---------------------------------------------------
+        // Alinhamento horizontal: Centraliza as bolinhas A-E
+        const offsetX = -(stepX * 1.6); 
+        // -------------------------------------
 
         let acertos = 0;
         let html = "";
@@ -120,19 +95,16 @@
                 const posX = centerX + offsetX + (colIndex * stepX);
                 const posY = baseY + padY + (i * stepY);
 
-                // Marca os pontos vermelhos para você conferir
-                ctx.beginPath(); ctx.arc(posX, posY, 4, 0, 7); ctx.fill();
+                ctx.beginPath(); ctx.arc(posX, posY, 3, 0, 7); ctx.fill();
 
-                // Lógica de leitura de caneta
                 const sample = ctx.getImageData(posX - 2, posY - 2, 5, 5).data;
                 let soma = 0;
                 for (let p = 0; p < sample.length; p += 4) {
                     soma += (sample[p] + sample[p+1] + sample[p+2]) / 3;
                 }
-                const brilho = soma / (sample.length / 4);
-                const escuridao = 255 - brilho;
+                const escuridao = 255 - (soma / (sample.length / 4));
 
-                if (escuridao > maiorEscuridao && escuridao > 60) {
+                if (escuridao > maiorEscuridao && escuridao > 55) {
                     maiorEscuridao = escuridao;
                     escolhida = letra;
                 }
@@ -140,21 +112,16 @@
 
             const status = (escolhida === correta);
             if(status) acertos++;
-            html += `<div class="linha-check">
-                        <span>Questão ${(i+1).toString().padStart(2,'0')}: [${escolhida}]</span>
-                        <span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span>
-                     </div>`;
+            html += `<div class="linha-check"><span>Q${i+1}: [${escolhida}]</span><span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span></div>`;
         });
 
-        // Mostra o congelamento do sensor
         canvas.style.display = "block";
-        if (navigator.vibrate) navigator.vibrate(150);
+        if (navigator.vibrate) navigator.vibrate(200);
 
         setTimeout(() => {
             canvas.style.display = "none";
             document.getElementById('p-nome').innerText = nome;
-            const nota = ((acertos/gabarito.length)*10).toFixed(1);
-            document.getElementById('p-resumo').innerText = `NOTA: ${nota} | ACERTOS: ${acertos}/${gabarito.length}`;
+            document.getElementById('p-resumo').innerText = `Nota: ${((acertos/gabarito.length)*10).toFixed(1)} (${acertos}/${gabarito.length})`;
             document.getElementById('p-detalhes').innerHTML = html;
             painel.style.display = 'block';
         }, 1200);
