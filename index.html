@@ -2,94 +2,128 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Scanner OMR</title>
+<title>Scanner de Prova</title>
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
 <style>
 body{
     font-family:Arial;
     text-align:center;
-    background:#f0f0f0;
+    background:#0f172a;
+    color:white;
+    margin:0;
 }
-video, canvas{
-    width:90%;
+h2{
+    margin-top:15px;
+}
+video{
+    width:95%;
     max-width:500px;
-    border:2px solid #000;
-    margin:10px;
+    border-radius:12px;
+    margin-top:10px;
 }
 button{
-    padding:10px 20px;
+    padding:12px 20px;
+    margin:10px;
     font-size:16px;
+    border:none;
+    border-radius:8px;
     cursor:pointer;
+    background:#22c55e;
+    color:white;
 }
 #resultado{
     background:white;
-    padding:15px;
-    margin-top:15px;
-    border-radius:8px;
+    color:black;
+    padding:20px;
+    margin:20px;
+    border-radius:12px;
+    font-size:18px;
+}
+.nota{
+    font-size:26px;
+    font-weight:bold;
+    color:#16a34a;
 }
 </style>
 </head>
 <body>
 
-<h2>📄 Scanner OMR</h2>
+<h2>📄 Scanner de Prova</h2>
 
-<video id="video" autoplay></video>
+<video id="video" autoplay playsinline></video>
 <br>
-<button onclick="capturar()">📸 Capturar</button>
+<button onclick="capturar()">📸 Corrigir Prova</button>
 
 <canvas id="canvas" style="display:none;"></canvas>
 
-<div id="resultado"></div>
+<div id="resultado">Aguardando leitura...</div>
 
 <script>
 
+let stream;
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-// Ativar câmera
-navigator.mediaDevices.getUserMedia({video:true})
-.then(stream => video.srcObject = stream);
-
-// Gabarito (altere se quiser)
+// Gabarito (ajuste se quiser)
 const gabarito = ["A","E","C"];
 
-function capturar(){
+// =========================
+// INICIAR CÂMERA TRASEIRA
+// =========================
+async function iniciarCamera(){
+    try{
+        stream = await navigator.mediaDevices.getUserMedia({
+            video:{
+                facingMode:{ ideal:"environment" },
+                width:{ideal:1280},
+                height:{ideal:720}
+            }
+        });
+        video.srcObject = stream;
+    }catch(e){
+        alert("Erro ao acessar câmera");
+    }
+}
 
-    document.getElementById("resultado").innerHTML = "";
+iniciarCamera();
+
+// =========================
+// CAPTURAR
+// =========================
+function capturar(){
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+
     ctx.drawImage(video,0,0);
 
     const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
 
-    lerQR(imageData);
-    lerOMR(imageData);
+    const qrTexto = lerQR(imageData);
+    const resultado = lerOMR(imageData);
+
+    mostrarResultado(qrTexto, resultado);
 }
 
-// =====================
-// LEITURA QR CODE
-// =====================
+// =========================
+// LER QR
+// =========================
 function lerQR(imageData){
 
-    const code = jsQR(imageData.data,
-                      imageData.width,
-                      imageData.height);
+    const code = jsQR(
+        imageData.data,
+        imageData.width,
+        imageData.height
+    );
 
-    if(code){
-        document.getElementById("resultado").innerHTML +=
-            "<p><b>QR:</b> "+code.data+"</p>";
-    }else{
-        document.getElementById("resultado").innerHTML +=
-            "<p>QR não encontrado</p>";
-    }
+    return code ? code.data : "QR não encontrado";
 }
 
-// =====================
-// LEITURA OMR
-// =====================
+// =========================
+// LER OMR
+// =========================
 function lerOMR(imageData){
 
     let respostasAluno = [];
@@ -136,19 +170,15 @@ function lerOMR(imageData){
         }
     }
 
-    document.getElementById("resultado").innerHTML +=
-        "<p><b>Respostas:</b> "+respostasAluno.join(", ")+"</p>";
-
-    document.getElementById("resultado").innerHTML +=
-        "<p><b>Nota:</b> "+nota+"</p>";
+    return {respostasAluno, nota};
 }
 
-// =====================
-// Conta pixels escuros numa área circular
-// =====================
+// =========================
+// CONTAR PIXELS ESCUROS
+// =========================
 function contarPixelsEscuros(imageData, cx, cy, largura){
 
-    let raio = 12;
+    let raio = 14;
     let soma = 0;
 
     for(let y=-raio; y<raio; y++){
@@ -159,6 +189,8 @@ function contarPixelsEscuros(imageData, cx, cy, largura){
                 let px = Math.floor(cx + x);
                 let py = Math.floor(cy + y);
 
+                if(px<0 || py<0) continue;
+
                 let pos = (py * largura + px) * 4;
 
                 let r = imageData.data[pos];
@@ -167,7 +199,7 @@ function contarPixelsEscuros(imageData, cx, cy, largura){
 
                 let brilho = (r+g+b)/3;
 
-                if(brilho < 120){
+                if(brilho < 130){
                     soma++;
                 }
             }
@@ -175,6 +207,18 @@ function contarPixelsEscuros(imageData, cx, cy, largura){
     }
 
     return soma;
+}
+
+// =========================
+// MOSTRAR RESULTADO
+// =========================
+function mostrarResultado(qr, resultado){
+
+    document.getElementById("resultado").innerHTML = `
+        <p><b>QR:</b> ${qr}</p>
+        <p><b>Respostas:</b> ${resultado.respostasAluno.join(", ")}</p>
+        <p class="nota">Nota: ${resultado.nota}</p>
+    `;
 }
 
 </script>
