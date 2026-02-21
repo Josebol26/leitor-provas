@@ -13,9 +13,7 @@ body{
     color:white;
     margin:0;
 }
-h2{
-    margin-top:15px;
-}
+h2{ margin-top:15px; }
 video{
     width:95%;
     max-width:500px;
@@ -66,7 +64,7 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-// Gabarito (ajuste se quiser)
+// AJUSTE SEU GABARITO AQUI
 const gabarito = ["A","E","C"];
 
 // =========================
@@ -86,7 +84,6 @@ async function iniciarCamera(){
         alert("Erro ao acessar câmera");
     }
 }
-
 iniciarCamera();
 
 // =========================
@@ -101,10 +98,16 @@ function capturar(){
 
     const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
 
-    const qrTexto = lerQR(imageData);
-    const resultado = lerOMR(imageData);
+    const qr = lerQR(imageData);
 
-    mostrarResultado(qrTexto, resultado);
+    if(!qr){
+        mostrarResultado("QR não encontrado", {respostasAluno:["-","-","-"], nota:0});
+        return;
+    }
+
+    const resultado = lerOMR(imageData, qr.location);
+
+    mostrarResultado(qr.texto, resultado);
 }
 
 // =========================
@@ -112,38 +115,38 @@ function capturar(){
 // =========================
 function lerQR(imageData){
 
-    // Converter para escala de cinza
-    let data = imageData.data;
-
-    for(let i = 0; i < data.length; i += 4){
-        let media = (data[i] + data[i+1] + data[i+2]) / 3;
-        data[i] = data[i+1] = data[i+2] = media > 120 ? 255 : 0;
-    }
-
     const code = jsQR(
-        data,
+        imageData.data,
         imageData.width,
         imageData.height
     );
 
-    return code ? code.data : "QR não encontrado";
+    if(!code) return null;
+
+    return {
+        texto: code.data,
+        location: code.location
+    };
 }
+
 // =========================
-// LER OMR
+// LER OMR BASEADO NO QR
 // =========================
-function lerOMR(imageData){
+function lerOMR(imageData, qrLocation){
 
     let respostasAluno = [];
     let nota = 0;
 
     const largura = canvas.width;
-    const altura = canvas.height;
 
-    const inicioY = altura * 0.55;
-    const espacamentoY = altura * 0.08;
+    // Base na parte inferior do QR
+    const baseY = qrLocation.bottomRightCorner.y;
 
-    const inicioX = largura * 0.25;
-    const espacamentoX = largura * 0.1;
+    // AJUSTES FINOS (podemos calibrar se precisar)
+    const espacamentoY = 65;
+    const espacamentoX = 55;
+    const inicioX = qrLocation.bottomRightCorner.x - 220;
+    const inicioY = baseY + 130;
 
     const alternativas = ["A","B","C","D","E"];
 
@@ -164,14 +167,12 @@ function lerOMR(imageData){
                 largura
             );
 
-            // exige preenchimento mínimo
-            if(soma > 200 && soma > maiorPreenchimento){
+            if(soma > 180 && soma > maiorPreenchimento){
                 maiorPreenchimento = soma;
                 respostaMarcada = alternativas[a];
             }
         }
 
-        // se nenhuma bolha passou do limite
         if(respostaMarcada === null){
             respostasAluno.push("-");
         }else{
@@ -184,6 +185,7 @@ function lerOMR(imageData){
 
     return {respostasAluno, nota};
 }
+
 // =========================
 // CONTAR PIXELS ESCUROS
 // =========================
