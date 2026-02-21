@@ -3,23 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Alta Sensibilidade</title>
+    <title>Terminal de Notas - Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; background: #000; color: white; overflow: hidden; }
+        :root { --primary: #007bff; --success: #28a745; --dark: #121212; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--dark); color: white; overflow: hidden; }
+        
+        /* Câmera em tela cheia */
         #video { width: 100vw; height: 100vh; object-fit: cover; }
+        
+        /* Mira do Scanner */
         .overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            border: 50px solid rgba(0,0,0,0.5); box-sizing: border-box;
+            border: 60px solid rgba(0,0,0,0.6); box-sizing: border-box;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
+            pointer-events: none;
         }
-        .mira { width: 250px; height: 250px; border: 2px solid #00ff00; border-radius: 20px; box-shadow: 0 0 20px #00ff00; }
-        .info { background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; margin-top: 20px; text-align: center; }
-        #resultado {
-            position: fixed; bottom: 20px; left: 20px; right: 20px;
-            background: white; color: black; padding: 20px; border-radius: 15px;
-            display: none; z-index: 100;
+        .mira { width: 220px; height: 220px; border: 3px solid var(--success); border-radius: 15px; box-shadow: 0 0 15px var(--success); }
+        .instrucao { margin-top: 20px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; }
+
+        /* Painel de Resultados (Ficha do Aluno) */
+        #painel-resultado {
+            position: fixed; bottom: 0; left: 0; right: 0; top: 10%;
+            background: #f4f7f6; color: #333; padding: 25px;
+            border-radius: 25px 25px 0 0; display: none; z-index: 100;
+            overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
         }
+        
+        .card-aluno { border-left: 5px solid var(--primary); background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .card-aluno h2 { margin: 0; color: var(--primary); font-size: 20px; }
+        
+        .grade-gabarito { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
+        .item-q { background: #eee; padding: 10px; border-radius: 5px; text-align: center; font-weight: bold; font-size: 12px; }
+        
+        .btn-acao { width: 100%; padding: 18px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-salvar { background: var(--success); color: white; }
+        .btn-cancelar { background: #6c757d; color: white; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -28,15 +47,23 @@
     
     <div class="overlay">
         <div class="mira"></div>
-        <div class="info">
-            <p id="status">Buscando QR Code...</p>
-        </div>
+        <div class="instrucao">Enquadre o QR Code da Prova</div>
     </div>
 
-    <div id="resultado">
-        <h2 id="res-aluno" style="margin:0"></h2>
-        <p id="res-dados"></p>
-        <button onclick="resetar()" style="width:100%; padding:15px; background:#007bff; color:white; border:none; border-radius:10px;">PRÓXIMA PROVA</button>
+    <div id="painel-resultado">
+        <div class="card-aluno">
+            <p style="margin:0; font-size:12px; color:#777;">ALUNO IDENTIFICADO:</p>
+            <h2 id="nome-aluno">---</h2>
+            <p id="tipo-prova" style="margin:5px 0 0 0; font-weight:bold;"></p>
+        </div>
+
+        <h4 style="margin-bottom:10px;">Gabarito da Prova:</h4>
+        <div id="container-gabarito" class="grade-gabarito"></div>
+
+        <div style="margin-top:30px;">
+            <button class="btn-acao btn-salvar" onclick="proximo()">LANÇAR NOTA E PRÓXIMO</button>
+            <button class="btn-acao btn-cancelar" onclick="resetar()">CANCELAR / REPETIR</button>
+        </div>
     </div>
 
     <canvas id="canvas" style="display:none;"></canvas>
@@ -44,25 +71,19 @@
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const statusTxt = document.getElementById('status');
-    const resDiv = document.getElementById('resultado');
+    const painel = document.getElementById('painel-resultado');
     let lendo = true;
 
     async function iniciar() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                } 
+                video: { facingMode: "environment", width: { ideal: 1280 } } 
             });
             video.srcObject = stream;
-            video.setAttribute("playsinline", true);
             video.play();
             requestAnimationFrame(scanLoop);
         } catch (err) {
-            alert("Erro na câmera: " + err);
+            alert("Erro: Certifique-se de usar HTTPS e permitir a câmera.");
         }
     }
 
@@ -72,47 +93,55 @@
             canvas.width = video.videoWidth;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-            });
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
 
             if (code) {
                 lendo = false;
-                processar(code.data);
+                if (navigator.vibrate) navigator.vibrate(150);
+                exibirDados(code.data);
             }
         }
         if(lendo) requestAnimationFrame(scanLoop);
     }
 
-    function processar(data) {
+    function exibirDados(data) {
         try {
-            // Formato: ALUNO:Nome|TIPO:A|GAB:ABCDE
+            // Split: ALUNO:Nome|TIPO:A|GAB:ABCDE
             const partes = data.split('|');
             const nome = partes[0].split(':')[1];
             const tipo = partes[1].split(':')[1];
             const gab = partes[2].split(':')[1];
 
-            document.getElementById('res-aluno').innerText = nome;
-            document.getElementById('res-dados').innerText = `Prova Tipo ${tipo}\nGabarito: ${gab}`;
-            resDiv.style.display = 'block';
-            statusTxt.innerText = "Leitura concluída!";
+            document.getElementById('nome-aluno').innerText = nome;
+            document.getElementById('tipo-prova').innerText = "TIPO DA PROVA: " + tipo;
             
-            // Feedback vibratório (se o celular suportar)
-            if (navigator.vibrate) navigator.vibrate(100);
+            const container = document.getElementById('container-gabarito');
+            container.innerHTML = "";
             
+            gab.split('').forEach((letra, i) => {
+                const div = document.createElement('div');
+                div.className = "item-q";
+                div.innerHTML = `<span style="color:#999; font-size:10px;">Q${i+1}</span><br>${letra}`;
+                container.appendChild(div);
+            });
+
+            painel.style.display = 'block';
         } catch (e) {
-            lendo = true;
-            statusTxt.innerText = "QR Code inválido, tente outro.";
-            requestAnimationFrame(scanLoop);
+            alert("QR Code não compatível.");
+            resetar();
         }
     }
 
+    function proximo() {
+        // Futuramente aqui enviaremos para um Excel ou Banco de Dados
+        alert("Nota registrada com sucesso!");
+        resetar();
+    }
+
     function resetar() {
-        resDiv.style.display = 'none';
+        painel.style.display = 'none';
         lendo = true;
-        statusTxt.innerText = "Buscando QR Code...";
         requestAnimationFrame(scanLoop);
     }
 
