@@ -3,33 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Calibração Visual</title>
+    <title>Scanner OMR - Snap na Moldura</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
-        #painel { 
-            position: fixed; bottom: 0; left: 0; right: 0; background: white; 
-            padding: 25px; border-radius: 25px 25px 0 0; display: none; 
-            z-index: 100; max-height: 70vh; overflow-y: auto; color: #333; 
-        }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
-        .acerto { color: #28a745; font-weight: bold; }
-        .erro { color: #dc3545; font-weight: bold; }
-        button { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; }
+        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 100; color: #333; }
         #msg { position: fixed; top: 20px; width: 100%; text-align: center; color: white; z-index: 20; font-weight: bold; text-shadow: 2px 2px 2px #000; }
+        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+        button { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="msg">APONTE PARA O QR CODE</div>
+    <div id="msg">ENQUADRE A MOLDURA PRETA</div>
     <video id="video" playsinline></video>
     <canvas id="canvas-ui"></canvas>
 
     <div id="painel">
         <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
-        <p id="p-resumo" style="font-weight: bold; margin: 15px 0;"></p>
+        <p id="p-resumo" style="font-weight: bold; margin: 10px 0;"></p>
         <div id="p-detalhes"></div>
         <button onclick="resetar()">PRÓXIMA PROVA</button>
     </div>
@@ -66,82 +60,80 @@
                 const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
                 const gabarito = qr.data.split('|')[2].split(':')[1];
                 
-                // --- PARÂMETROS DE ENCAIXE (Sincronizados com seu Gerador) ---
-                const startX = qr.location.topLeftCorner.x + (qrSize * 0.22);
-                const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.55);
-                const stepH = qrSize * 0.28;
-                const stepV = qrSize * 0.32;
+                // --- DETECÇÃO DA MOLDURA (SNAP) ---
+                // Expandimos a partir do QR Code para achar a borda preta grossa
+                const offsetMoldura = qrSize * 0.45; 
+                const molduraL = qr.location.topLeftCorner.x - offsetMoldura;
+                const molduraT = qr.location.topLeftCorner.y - offsetMoldura;
+                const molduraW = qrSize + (offsetMoldura * 2);
+                const molduraH = (qrSize * 1.5) + (gabarito.length * (qrSize * 0.35)) + offsetMoldura;
 
-                // 1. Desenhar Retângulo de Enquadramento (Snap)
+                // Desenha a linha verde exatamente na moldura
                 ctx.strokeStyle = "#00ff00";
-                ctx.lineWidth = 4;
-                ctx.strokeRect(
-                    qr.location.topLeftCorner.x - 15, 
-                    qr.location.topLeftCorner.y - 15, 
-                    qrSize + 30, 
-                    (qrSize * 1.5) + (gabarito.length * stepV)
-                );
+                ctx.lineWidth = 6;
+                ctx.strokeRect(molduraL, molduraT, molduraW, molduraH);
 
-                // 2. Desenhar Pontos de Leitura em Tempo Real
-                let acertosNoFrame = 0;
+                // --- POSICIONAMENTO DAS BOLINHAS (BASEADO NA MOLDURA) ---
+                // Ajustado conforme a sua imagem: "01:" fica à esquerda, bolinhas centralizadas
+                const startX = molduraL + (molduraW * 0.28); 
+                const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.65);
+                const stepH = qrSize * 0.28; // Espaço entre A, B, C...
+                const stepV = qrSize * 0.35; // Espaço entre Q1, Q2...
+
                 let pontosParaLeitura = [];
-
                 gabarito.split('').forEach((correta, i) => {
                     ['A','B','C','D','E'].forEach((letra, col) => {
                         const px = startX + (col * stepH);
                         const py = startY + (i * stepV);
                         
-                        // Desenha círculo de mira
                         ctx.fillStyle = "red";
                         ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill();
-                        
                         pontosParaLeitura.push({x: px, y: py, letra: letra, questao: i, correta: correta});
                     });
                 });
 
                 frameCount++;
-                msg.innerText = "ESTABILIZE O ENQUADRAMENTO (" + Math.round((frameCount/30)*100) + "%)";
+                msg.innerText = "ESTABILIZE (" + Math.round((frameCount/40)*100) + "%)";
 
-                if (frameCount >= 30) { // Precisa de 1 segundo de estabilidade
+                if (frameCount >= 40) {
                     lendo = false;
-                    processar(qr.data, pontosParaLeitura);
+                    analisarPreenchimento(imgData.data, pontosParaLeitura, qr.data);
                 }
             } else {
                 frameCount = 0;
-                msg.innerText = "APONTE PARA O QR CODE";
+                msg.innerText = "BUSCANDO MOLDURA E QR CODE...";
             }
         }
         if(lendo) requestAnimationFrame(loop);
     }
 
-    function processar(data, pontos) {
-        const [alunoPart, tipoPart, gabPart] = data.split('|');
+    function analisarPreenchimento(pixels, pontos, qrData) {
+        const [alunoPart, tipoPart, gabPart] = qrData.split('|');
         const nome = alunoPart.split(':')[1];
         const gabarito = gabPart.split(':')[1];
         
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-        let respostasMarcadas = new Array(gabarito.length).fill("Vazio");
-        let maioresEscuridoes = new Array(gabarito.length).fill(0);
+        let marcadas = new Array(gabarito.length).fill("Vazio");
+        let maiorEsc = new Array(gabarito.length).fill(0);
 
         pontos.forEach(p => {
             const idx = (Math.floor(p.y) * canvas.width + Math.floor(p.x)) * 4;
-            const esc = 255 - ((imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3);
+            // Cálculo de escuridão: 255 (preto total) a 0 (branco)
+            const esc = 255 - ((pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3);
 
-            if (esc > maioresEscuridoes[p.questao] && esc > 60) {
-                maioresEscuridoes[p.questao] = esc;
-                respostasMarcadas[p.questao] = p.letra;
+            if (esc > maiorEsc[p.questao] && esc > 70) { // 70 é a sensibilidade para a bolinha preta
+                maiorEsc[p.questao] = esc;
+                marcadas[p.questao] = p.letra;
             }
         });
 
         let acertos = 0;
         let html = "";
-        respostasMarcadas.forEach((marcada, i) => {
-            const correta = gabarito[i];
-            const status = (marcada === correta);
-            if(status) acertos++;
+        marcadas.forEach((m, i) => {
+            const ok = (m === gabarito[i]);
+            if(ok) acertos++;
             html += `<div class="linha-check">
-                <span>Questão ${i+1}: [${marcada}]</span>
-                <span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span>
+                <span>Q${i+1}: [${m}]</span>
+                <span style="color:${ok?'green':'red'}">${ok?'✔':'✘'}</span>
             </div>`;
         });
 
@@ -149,7 +141,6 @@
         document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabarito.length)*10).toFixed(1)} (${acertos}/${gabarito.length})`;
         document.getElementById('p-detalhes').innerHTML = html;
         painel.style.display = 'block';
-        if (navigator.vibrate) navigator.vibrate(200);
     }
 
     function resetar() {
