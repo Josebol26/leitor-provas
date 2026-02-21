@@ -3,24 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Calibração Manual</title>
+    <title>Scanner OMR - Calibração Final</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
         
-        /* Painel de Controles */
+        /* Painel de Controles com Visor de Dados */
         #controles { 
             position: fixed; top: 10px; right: 10px; z-index: 100; 
-            background: rgba(0,0,0,0.8); padding: 12px; border-radius: 12px; color: white;
-            display: none; flex-direction: column; gap: 8px; width: 140px;
+            background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; color: white;
+            display: none; flex-direction: column; gap: 5px; width: 150px; font-size: 11px;
         }
-        .grupo-ajuste { display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; }
-        .btn-ajuste { background: #555; color: white; border: 1px solid #fff; width: 100%; padding: 8px; border-radius: 5px; font-size: 16px; margin: 2px 0; }
-        label { font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+        .grupo-ajuste { display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #444; padding: 5px 0; }
+        .btn-ajuste { background: #555; color: white; border: 1px solid #fff; width: 100%; padding: 6px; border-radius: 5px; font-size: 14px; margin: 2px 0; }
+        .visor { color: #00ff00; font-family: monospace; font-size: 12px; margin-top: 2px; }
 
-        #msg { position: fixed; top: 10px; left: 10px; width: 40%; text-align: left; color: white; z-index: 20; font-size: 12px; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 8px; }
         #btn-capturar { 
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
             padding: 20px 40px; background: #28a745; color: white; border: none;
@@ -29,28 +28,34 @@
         }
 
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 110; color: #333; max-height: 80vh; overflow-y: auto; }
-        .btn-reset { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
 
-    <div id="msg">Aproxime o QR Code</div>
-    
     <div id="controles">
         <div class="grupo-ajuste">
-            <label>Esquerda/Direita</label>
-            <button class="btn-ajuste" onclick="offsetX -= 0.01">⬅️</button>
-            <button class="btn-ajuste" onclick="offsetX += 0.01">➡️</button>
+            <label>ESQ / DIR</label>
+            <button class="btn-ajuste" onclick="offsetX -= 0.01; atualizarVisor();">⬅️</button>
+            <button class="btn-ajuste" onclick="offsetX += 0.01; atualizarVisor();">➡️</button>
+            <div id="v-offX" class="visor">X: 0.22</div>
         </div>
         <div class="grupo-ajuste">
-            <label>Subir/Descer</label>
-            <button class="btn-ajuste" onclick="offsetY -= 0.02">⬆️</button>
-            <button class="btn-ajuste" onclick="offsetY += 0.02">⬇️</button>
+            <label>SUBIR / DESCER</label>
+            <button class="btn-ajuste" onclick="offsetY -= 0.02; atualizarVisor();">⬆️</button>
+            <button class="btn-ajuste" onclick="offsetY += 0.02; atualizarVisor();">⬇️</button>
+            <div id="v-offY" class="visor">Y: 1.70</div>
         </div>
         <div class="grupo-ajuste">
-            <label>Largura (A-E)</label>
-            <button class="btn-ajuste" onclick="gapH += 0.01">+</button>
-            <button class="btn-ajuste" onclick="gapH -= 0.01">-</button>
+            <label>LARGURA (A-E)</label>
+            <button class="btn-ajuste" onclick="gapH += 0.01; atualizarVisor();">+</button>
+            <button class="btn-ajuste" onclick="gapH -= 0.01; atualizarVisor();">-</button>
+            <div id="v-gapH" class="visor">H: 0.40</div>
+        </div>
+        <div class="grupo-ajuste">
+            <label>ESPAÇO LINHAS</label>
+            <button class="btn-ajuste" onclick="gapV += 0.01; atualizarVisor();">+</button>
+            <button class="btn-ajuste" onclick="gapV -= 0.01; atualizarVisor();">-</button>
+            <div id="v-gapV" class="visor">V: 0.36</div>
         </div>
     </div>
 
@@ -62,18 +67,17 @@
     <div id="painel">
         <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
         <div id="p-detalhes" style="margin: 15px 0;"></div>
-        <button class="btn-reset" onclick="resetar()">NOVA LEITURA</button>
+        <button style="width:100%; padding:15px;" onclick="resetar()">NOVA LEITURA</button>
     </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
-    const msg = document.getElementById('msg');
     const btnCapturar = document.getElementById('btn-capturar');
     const painelControle = document.getElementById('controles');
     
-    // Valores iniciais (que você vai ajustar nos botões)
+    // VARIÁVEIS PARA CALIBRAR
     let offsetX = 0.22; 
     let offsetY = 1.70; 
     let gapH = 0.40;    
@@ -81,6 +85,13 @@
 
     let monitorando = true;
     let dadosSalvos = null;
+
+    function atualizarVisor() {
+        document.getElementById('v-offX').innerText = "X: " + offsetX.toFixed(2);
+        document.getElementById('v-offY').innerText = "Y: " + offsetY.toFixed(2);
+        document.getElementById('v-gapH').innerText = "H: " + gapH.toFixed(2);
+        document.getElementById('v-gapV').innerText = "V: " + gapV.toFixed(2);
+    }
 
     async function iniciar() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -101,17 +112,11 @@
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                msg.innerText = "AJUSTE NOS BOTÕES";
                 btnCapturar.style.display = 'block';
                 painelControle.style.display = 'flex';
-                
                 const info = calcularPosicoes(qr);
                 desenharPontos(info.pontos);
-                
                 dadosSalvos = { qr, imgData, pontos: info.pontos };
-            } else {
-                btnCapturar.style.display = 'none';
-                // Mantemos o painel aberto se já tiver lido o QR uma vez para facilitar
             }
         }
         if(monitorando) requestAnimationFrame(loop);
@@ -122,13 +127,11 @@
         const tr = qr.location.topRightCorner;
         const bl = qr.location.bottomLeftCorner;
         const qrSize = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
-        
         const vX = { x: (tr.x - tl.x) / qrSize, y: (tr.y - tl.y) / qrSize };
         const vY = { x: (bl.x - tl.x) / qrSize, y: (bl.y - tl.y) / qrSize };
 
         const gabStr = qr.data.split('|')[2].split(':')[1];
         let pontos = [];
-
         for (let i = 0; i < gabStr.length; i++) {
             for (let col = 0; col < 5; col++) {
                 const px = tl.x + (vX.x * (offsetX + col * gapH) * qrSize) + (vY.x * (offsetY + i * gapV) * qrSize);
@@ -143,15 +146,12 @@
         pontos.forEach(p => {
             ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
             ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
-            ctx.strokeStyle = "white";
-            ctx.stroke();
         });
     }
 
     function finalizarLeitura() {
         if (!dadosSalvos) return;
         monitorando = false;
-        
         const { qr, imgData, pontos } = dadosSalvos;
         const gabarito = qr.data.split('|')[2].split(':')[1];
         let marcadas = new Array(gabarito.length).fill("Vazio");
@@ -171,15 +171,15 @@
         marcadas.forEach((m, i) => {
             const ok = (m === gabarito[i]);
             if(ok) acertos++;
-            html += `<div class="linha-check"><span>Q${i+1}: [${m}] - GAB [${gabarito[i]}]</span><span>${ok?'✅':'❌'}</span></div>`;
+            html += `<div style="display:flex; justify-content:space-between; padding:5px; border-bottom:1px solid #eee;">
+                <span>Q${i+1}: [${m}] - GAB [${gabarito[i]}]</span><span>${ok?'✅':'❌'}</span>
+            </div>`;
         });
 
         document.getElementById('p-nome').innerText = qr.data.split('|')[0].split(':')[1];
-        // Mostrando a fração conforme sua instrução: numerador/denominador
-        document.getElementById('p-detalhes').innerHTML = `<h3>NOTA: ${acertos}/${gabarito.length}</h3><hr>${html}`;
+        // Nota formatada como fração conforme sua instrução
+        document.getElementById('p-detalhes').innerHTML = `<h2>Acertos: ${acertos}/${gabarito.length}</h2><hr>${html}`;
         document.getElementById('painel').style.display = 'block';
-        btnCapturar.style.display = 'none';
-        painelControle.style.display = 'none';
     }
 
     function resetar() {
@@ -189,6 +189,7 @@
     }
 
     iniciar();
+    atualizarVisor();
 </script>
 </body>
 </html>
