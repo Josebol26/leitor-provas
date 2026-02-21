@@ -3,30 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Controle Total</title>
+    <title>Scanner OMR - Calibração Manual</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
-        #msg { position: fixed; top: 20px; width: 80%; left: 10%; text-align: center; color: white; z-index: 20; font-weight: bold; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 50px; }
         
-        /* Botão flutuante para capturar */
+        /* Painel de Controles */
+        #controles { 
+            position: fixed; top: 10px; right: 10px; z-index: 100; 
+            background: rgba(0,0,0,0.8); padding: 12px; border-radius: 12px; color: white;
+            display: none; flex-direction: column; gap: 8px; width: 140px;
+        }
+        .grupo-ajuste { display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        .btn-ajuste { background: #555; color: white; border: 1px solid #fff; width: 100%; padding: 8px; border-radius: 5px; font-size: 16px; margin: 2px 0; }
+        label { font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+
+        #msg { position: fixed; top: 10px; left: 10px; width: 40%; text-align: left; color: white; z-index: 20; font-size: 12px; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 8px; }
         #btn-capturar { 
-            position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
             padding: 20px 40px; background: #28a745; color: white; border: none;
             border-radius: 50px; font-weight: bold; font-size: 18px; z-index: 100;
-            display: none; box-shadow: 0 0 20px rgba(0,255,0,0.4);
+            display: none; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
         #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 110; color: #333; max-height: 80vh; overflow-y: auto; }
-        .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
         .btn-reset { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
 
-    <div id="msg">Aguardando QR Code...</div>
+    <div id="msg">Aproxime o QR Code</div>
+    
+    <div id="controles">
+        <div class="grupo-ajuste">
+            <label>Esquerda/Direita</label>
+            <button class="btn-ajuste" onclick="offsetX -= 0.01">⬅️</button>
+            <button class="btn-ajuste" onclick="offsetX += 0.01">➡️</button>
+        </div>
+        <div class="grupo-ajuste">
+            <label>Subir/Descer</label>
+            <button class="btn-ajuste" onclick="offsetY -= 0.02">⬆️</button>
+            <button class="btn-ajuste" onclick="offsetY += 0.02">⬇️</button>
+        </div>
+        <div class="grupo-ajuste">
+            <label>Largura (A-E)</label>
+            <button class="btn-ajuste" onclick="gapH += 0.01">+</button>
+            <button class="btn-ajuste" onclick="gapH -= 0.01">-</button>
+        </div>
+    </div>
+
     <button id="btn-capturar" onclick="finalizarLeitura()">CONFERIR NOTA</button>
 
     <video id="video" playsinline></video>
@@ -44,11 +71,12 @@
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
     const btnCapturar = document.getElementById('btn-capturar');
+    const painelControle = document.getElementById('controles');
     
-    // --- CALIBRAÇÃO ATUALIZADA (MAIS LARGA) ---
+    // Valores iniciais (que você vai ajustar nos botões)
     let offsetX = 0.22; 
     let offsetY = 1.70; 
-    let gapH = 0.40;    // Aumentado para afastar mais as letras lateralmente
+    let gapH = 0.40;    
     let gapV = 0.36;    
 
     let monitorando = true;
@@ -73,19 +101,17 @@
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                msg.innerText = "ALINHE OS PONTOS E APERTE O BOTÃO";
+                msg.innerText = "AJUSTE NOS BOTÕES";
                 btnCapturar.style.display = 'block';
+                painelControle.style.display = 'flex';
                 
-                // Desenha a "mira" em tempo real
                 const info = calcularPosicoes(qr);
                 desenharPontos(info.pontos);
                 
-                // Salva o estado atual para quando clicar no botão
                 dadosSalvos = { qr, imgData, pontos: info.pontos };
             } else {
-                msg.innerText = "Buscando QR Code...";
                 btnCapturar.style.display = 'none';
-                dadosSalvos = null;
+                // Mantemos o painel aberto se já tiver lido o QR uma vez para facilitar
             }
         }
         if(monitorando) requestAnimationFrame(loop);
@@ -115,11 +141,9 @@
 
     function desenharPontos(pontos) {
         pontos.forEach(p => {
-            ctx.fillStyle = "rgba(255, 0, 0, 0.7)";
+            ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
             ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
-            // Círculo de borda para facilitar visão
             ctx.strokeStyle = "white";
-            ctx.lineWidth = 1;
             ctx.stroke();
         });
     }
@@ -136,7 +160,6 @@
         pontos.forEach(p => {
             const idx = (Math.floor(p.y) * canvas.width + Math.floor(p.x)) * 4;
             const esc = 255 - ((imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2]) / 3);
-
             if (esc > maiorEsc[p.qIndex] && esc > 75) {
                 maiorEsc[p.qIndex] = esc;
                 marcadas[p.qIndex] = p.letra;
@@ -148,13 +171,15 @@
         marcadas.forEach((m, i) => {
             const ok = (m === gabarito[i]);
             if(ok) acertos++;
-            html += `<div class="linha-check"><span>Q${i+1}: SUA [${m}] - GAB [${gabarito[i]}]</span><span>${ok?'✅':'❌'}</span></div>`;
+            html += `<div class="linha-check"><span>Q${i+1}: [${m}] - GAB [${gabarito[i]}]</span><span>${ok?'✅':'❌'}</span></div>`;
         });
 
         document.getElementById('p-nome').innerText = qr.data.split('|')[0].split(':')[1];
-        document.getElementById('p-detalhes').innerHTML = `<b>ACERTOS: ${acertos} de ${gabarito.length}</b><hr>${html}`;
+        // Mostrando a fração conforme sua instrução: numerador/denominador
+        document.getElementById('p-detalhes').innerHTML = `<h3>NOTA: ${acertos}/${gabarito.length}</h3><hr>${html}`;
         document.getElementById('painel').style.display = 'block';
         btnCapturar.style.display = 'none';
+        painelControle.style.display = 'none';
     }
 
     function resetar() {
