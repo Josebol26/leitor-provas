@@ -3,157 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Leitor de Provas Pro</title>
+    <title>Scanner OMR Pro - Alta Sensibilidade</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { 
-            font-family: 'Segoe UI', sans-serif; 
-            margin: 0; 
-            background: #121212; 
-            color: white; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
+        body { font-family: sans-serif; margin: 0; background: #000; color: white; overflow: hidden; }
+        #video { width: 100vw; height: 100vh; object-fit: cover; }
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            border: 50px solid rgba(0,0,0,0.5); box-sizing: border-box;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
-        #video-container {
-            position: relative;
-            width: 90%;
-            max-width: 400px;
-            aspect-ratio: 1/1;
-            border: 4px solid #007bff;
-            border-radius: 20px;
-            overflow: hidden;
-            background: #000;
-        }
-        #video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .guia-qr {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 60%;
-            height: 60%;
-            border: 2px dashed rgba(255,255,255,0.5);
-            pointer-events: none;
-        }
-        .btn-scan {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            border-radius: 50px;
-            margin-top: 20px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
-        }
-        .btn-scan:active { transform: scale(0.95); }
-        
+        .mira { width: 250px; height: 250px; border: 2px solid #00ff00; border-radius: 20px; box-shadow: 0 0 20px #00ff00; }
+        .info { background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; margin-top: 20px; text-align: center; }
         #resultado {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: white;
-            color: #333;
-            padding: 20px;
-            border-radius: 20px 20px 0 0;
-            display: none;
-            animation: slideUp 0.3s ease-out;
-            z-index: 10;
+            position: fixed; bottom: 20px; left: 20px; right: 20px;
+            background: white; color: black; padding: 20px; border-radius: 15px;
+            display: none; z-index: 100;
         }
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        
-        .status { margin-top: 10px; font-size: 0.9rem; color: #aaa; }
-        canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <h2 style="margin-bottom: 10px;">Leitor de Provas</h2>
-    <p class="status">Aponte para o QR Code e clique em Corrigir</p>
-
-    <div id="video-container">
-        <video id="video" autoplay playsinline></video>
-        <div class="guia-qr"></div>
+    <video id="video" playsinline></video>
+    
+    <div class="overlay">
+        <div class="mira"></div>
+        <div class="info">
+            <p id="status">Buscando QR Code...</p>
+        </div>
     </div>
-
-    <button class="btn-scan" onclick="capturar()">CORRIGIR</button>
 
     <div id="resultado">
-        <h3 id="res-aluno" style="margin: 0;">Aluno: ---</h3>
-        <p id="res-info" style="color: #666; margin: 5px 0;"></p>
-        <div id="res-gabarito" style="background: #f8f9fa; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 14px; border: 1px solid #ddd;"></div>
-        <button onclick="fecharResultado()" style="width:100%; margin-top:15px; padding:10px; border:none; background:#007bff; color:white; border-radius:8px;">Nova Leitura</button>
+        <h2 id="res-aluno" style="margin:0"></h2>
+        <p id="res-dados"></p>
+        <button onclick="resetar()" style="width:100%; padding:15px; background:#007bff; color:white; border:none; border-radius:10px;">PRÓXIMA PROVA</button>
     </div>
 
-    <canvas id="canvas"></canvas>
+    <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
+    const statusTxt = document.getElementById('status');
     const resDiv = document.getElementById('resultado');
+    let lendo = true;
 
-    // Iniciar Câmera
-    async function setupCamera() {
+    async function iniciar() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", width: 1280, height: 720 } 
+                video: { 
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
             });
             video.srcObject = stream;
+            video.setAttribute("playsinline", true);
+            video.play();
+            requestAnimationFrame(scanLoop);
         } catch (err) {
-            alert("Erro ao acessar câmera: Use HTTPS e dê permissão.");
+            alert("Erro na câmera: " + err);
         }
     }
 
-    function capturar() {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    function scanLoop() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
+            canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
+            });
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-        if (code) {
-            analisarDados(code.data);
-        } else {
-            alert("QR Code não detectado! Tente enquadrar melhor o código.");
+            if (code) {
+                lendo = false;
+                processar(code.data);
+            }
         }
+        if(lendo) requestAnimationFrame(scanLoop);
     }
 
-    function analisarDados(stringDados) {
-        // Formato esperado: ALUNO:Nome|TIPO:A|GAB:ABCDE
+    function processar(data) {
         try {
-            const partes = stringDados.split('|');
+            // Formato: ALUNO:Nome|TIPO:A|GAB:ABCDE
+            const partes = data.split('|');
             const nome = partes[0].split(':')[1];
             const tipo = partes[1].split(':')[1];
-            const gabarito = partes[2].split(':')[1];
+            const gab = partes[2].split(':')[1];
 
-            document.getElementById('res-aluno').innerText = "👨‍🎓 " + nome;
-            document.getElementById('res-info').innerText = "Prova Tipo " + tipo + " | " + gabarito.length + " questões";
-            document.getElementById('res-gabarito').innerText = "GABARITO: " + gabarito.split('').join(' - ');
+            document.getElementById('res-aluno').innerText = nome;
+            document.getElementById('res-dados').innerText = `Prova Tipo ${tipo}\nGabarito: ${gab}`;
+            resDiv.style.display = 'block';
+            statusTxt.innerText = "Leitura concluída!";
             
-            resDiv.style.display = "block";
+            // Feedback vibratório (se o celular suportar)
+            if (navigator.vibrate) navigator.vibrate(100);
+            
         } catch (e) {
-            alert("QR Code lido, mas o formato não é o da nossa prova.");
+            lendo = true;
+            statusTxt.innerText = "QR Code inválido, tente outro.";
+            requestAnimationFrame(scanLoop);
         }
     }
 
-    function fecharResultado() {
-        resDiv.style.display = "none";
+    function resetar() {
+        resDiv.style.display = 'none';
+        lendo = true;
+        statusTxt.innerText = "Buscando QR Code...";
+        requestAnimationFrame(scanLoop);
     }
 
-    // Inicializar
-    setupCamera();
+    iniciar();
 </script>
 </body>
 </html>
