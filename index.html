@@ -3,48 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Estabilizado</title>
+    <title>Scanner OMR - Calibração Visual</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        :root { --green: #28a745; --blue: #007bff; }
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
-        #canvas-debug { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; display: none; z-index: 50; }
-        
-        /* Mira visual */
-        .mira { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 300px; height: 450px; border: 2px solid rgba(255,255,255,0.3); 
-            border-radius: 15px; pointer-events: none; z-index: 10; 
-        }
-
-        /* Barra de progresso do delay */
-        #status-scan {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.7); color: white; padding: 10px 20px;
-            border-radius: 30px; font-size: 14px; z-index: 20; border: 1px solid var(--green);
-        }
-
+        #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
         #painel { 
             position: fixed; bottom: 0; left: 0; right: 0; background: white; 
             padding: 25px; border-radius: 25px 25px 0 0; display: none; 
-            z-index: 100; max-height: 75vh; overflow-y: auto; color: #333; 
+            z-index: 100; max-height: 70vh; overflow-y: auto; color: #333; 
         }
         .linha-check { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
-        .acerto { color: var(--green); font-weight: bold; }
+        .acerto { color: #28a745; font-weight: bold; }
         .erro { color: #dc3545; font-weight: bold; }
-        button { width: 100%; padding: 18px; background: var(--blue); color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; }
+        button { width: 100%; padding: 18px; background: #007bff; color: white; border: none; border-radius: 12px; font-weight: bold; }
+        #msg { position: fixed; top: 20px; width: 100%; text-align: center; color: white; z-index: 20; font-weight: bold; text-shadow: 2px 2px 2px #000; }
     </style>
 </head>
 <body>
 
-    <div id="status-scan">MANTENHA O QR CODE NA MIRA...</div>
+    <div id="msg">APONTE PARA O QR CODE</div>
     <video id="video" playsinline></video>
-    <canvas id="canvas-debug"></canvas>
-    <div class="mira"></div>
+    <canvas id="canvas-ui"></canvas>
 
     <div id="painel">
-        <h2 id="p-nome" style="margin:0; color: var(--blue);"></h2>
+        <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
         <p id="p-resumo" style="font-weight: bold; margin: 15px 0;"></p>
         <div id="p-detalhes"></div>
         <button onclick="resetar()">PRÓXIMA PROVA</button>
@@ -52,12 +36,13 @@
 
 <script>
     const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas-debug');
+    const canvas = document.getElementById('canvas-ui');
+    const ctx = canvas.getContext('2d');
     const painel = document.getElementById('painel');
-    const statusTxt = document.getElementById('status-scan');
+    const msg = document.getElementById('msg');
+    
     let lendo = true;
-    let tempoEstabilizado = 0;
-    const TEMPO_NECESSARIO = 40; // ~1.5 segundos a 30fps
+    let frameCount = 0;
 
     async function iniciar() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -72,90 +57,104 @@
         if (video.readyState === video.HAVE_ENOUGH_DATA && lendo) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0);
             
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                tempoEstabilizado++;
-                statusTxt.innerText = `LENDO... ${Math.round((tempoEstabilizado/TEMPO_NECESSARIO)*100)}%`;
-                statusTxt.style.borderColor = "yellow";
+                const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
+                const gabarito = qr.data.split('|')[2].split(':')[1];
+                
+                // --- PARÂMETROS DE ENCAIXE (Sincronizados com seu Gerador) ---
+                const startX = qr.location.topLeftCorner.x + (qrSize * 0.22);
+                const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.55);
+                const stepH = qrSize * 0.28;
+                const stepV = qrSize * 0.32;
 
-                if (tempoEstabilizado >= TEMPO_NECESSARIO) {
+                // 1. Desenhar Retângulo de Enquadramento (Snap)
+                ctx.strokeStyle = "#00ff00";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(
+                    qr.location.topLeftCorner.x - 15, 
+                    qr.location.topLeftCorner.y - 15, 
+                    qrSize + 30, 
+                    (qrSize * 1.5) + (gabarito.length * stepV)
+                );
+
+                // 2. Desenhar Pontos de Leitura em Tempo Real
+                let acertosNoFrame = 0;
+                let pontosParaLeitura = [];
+
+                gabarito.split('').forEach((correta, i) => {
+                    ['A','B','C','D','E'].forEach((letra, col) => {
+                        const px = startX + (col * stepH);
+                        const py = startY + (i * stepV);
+                        
+                        // Desenha círculo de mira
+                        ctx.fillStyle = "red";
+                        ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill();
+                        
+                        pontosParaLeitura.push({x: px, y: py, letra: letra, questao: i, correta: correta});
+                    });
+                });
+
+                frameCount++;
+                msg.innerText = "ESTABILIZE O ENQUADRAMENTO (" + Math.round((frameCount/30)*100) + "%)";
+
+                if (frameCount >= 30) { // Precisa de 1 segundo de estabilidade
                     lendo = false;
-                    processarProva(qr, ctx);
+                    processar(qr.data, pontosParaLeitura);
                 }
             } else {
-                tempoEstabilizado = 0;
-                statusTxt.innerText = "BUSCANDO QR CODE...";
-                statusTxt.style.borderColor = "var(--green)";
+                frameCount = 0;
+                msg.innerText = "APONTE PARA O QR CODE";
             }
         }
         if(lendo) requestAnimationFrame(loop);
     }
 
-    function processarProva(qr, ctx) {
-        const [alunoPart, tipoPart, gabPart] = qr.data.split('|');
+    function processar(data, pontos) {
+        const [alunoPart, tipoPart, gabPart] = data.split('|');
         const nome = alunoPart.split(':')[1];
         const gabarito = gabPart.split(':')[1];
+        
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let respostasMarcadas = new Array(gabarito.length).fill("Vazio");
+        let maioresEscuridoes = new Array(gabarito.length).fill(0);
 
-        // Medidas baseadas no tamanho do QR detectado (escala dinâmica)
-        const qrSize = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
-        
-        // Alinhamento vertical: Procura o início das questões abaixo do texto "SCANNER OMR"
-        const startX = qr.location.topLeftCorner.x + (qrSize * 0.22);
-        const startY = qr.location.bottomLeftCorner.y + (qrSize * 0.52);
-        
-        const distH = qrSize * 0.28;
-        const distV = qrSize * 0.33;
+        pontos.forEach(p => {
+            const idx = (Math.floor(p.y) * canvas.width + Math.floor(p.x)) * 4;
+            const esc = 255 - ((imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3);
+
+            if (esc > maioresEscuridoes[p.questao] && esc > 60) {
+                maioresEscuridoes[p.questao] = esc;
+                respostasMarcadas[p.questao] = p.letra;
+            }
+        });
 
         let acertos = 0;
         let html = "";
-        ctx.fillStyle = "red";
-
-        gabarito.split('').forEach((correta, i) => {
-            let escolhida = "Vazio";
-            let maxEsc = 0;
-
-            ['A','B','C','D','E'].forEach((letra, col) => {
-                const px = startX + (col * distH);
-                const py = startY + (i * distV);
-
-                ctx.beginPath(); ctx.arc(px, py, 4, 0, 7); ctx.fill();
-
-                const s = ctx.getImageData(px - 2, py - 2, 5, 5).data;
-                let soma = 0;
-                for (let p = 0; p < s.length; p += 4) soma += (s[p] + s[p+1] + s[p+2]) / 3;
-                const esc = 255 - (soma / 25);
-
-                if (esc > maxEsc && esc > 60) {
-                    maxEsc = esc;
-                    escolhida = letra;
-                }
-            });
-
-            const status = (escolhida === correta);
+        respostasMarcadas.forEach((marcada, i) => {
+            const correta = gabarito[i];
+            const status = (marcada === correta);
             if(status) acertos++;
-            html += `<div class="linha-check"><span>Q${i+1}: [${escolhida}]</span><span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span></div>`;
+            html += `<div class="linha-check">
+                <span>Questão ${i+1}: [${marcada}]</span>
+                <span class="${status ? 'acerto' : 'erro'}">${status ? '✔' : '✘'}</span>
+            </div>`;
         });
 
-        canvas.style.display = "block";
-        statusTxt.innerText = "PROVA PROCESSADA!";
-
-        setTimeout(() => {
-            canvas.style.display = "none";
-            document.getElementById('p-nome').innerText = nome;
-            document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabarito.length)*10).toFixed(1)}`;
-            document.getElementById('p-detalhes').innerHTML = html;
-            painel.style.display = 'block';
-        }, 1200);
+        document.getElementById('p-nome').innerText = nome;
+        document.getElementById('p-resumo').innerText = `NOTA: ${((acertos/gabarito.length)*10).toFixed(1)} (${acertos}/${gabarito.length})`;
+        document.getElementById('p-detalhes').innerHTML = html;
+        painel.style.display = 'block';
+        if (navigator.vibrate) navigator.vibrate(200);
     }
 
     function resetar() {
         painel.style.display = 'none';
-        tempoEstabilizado = 0;
+        frameCount = 0;
         lendo = true;
         requestAnimationFrame(loop);
     }
