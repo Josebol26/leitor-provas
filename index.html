@@ -157,22 +157,26 @@ function lerOMR(imageData){
                 largura
             );
 
-            if(soma > maiorPreenchimento){
+            // exige preenchimento mínimo
+            if(soma > 200 && soma > maiorPreenchimento){
                 maiorPreenchimento = soma;
                 respostaMarcada = alternativas[a];
             }
         }
 
-        respostasAluno.push(respostaMarcada);
-
-        if(respostaMarcada === gabarito[q]){
-            nota++;
+        // se nenhuma bolha passou do limite
+        if(respostaMarcada === null){
+            respostasAluno.push("-");
+        }else{
+            respostasAluno.push(respostaMarcada);
+            if(respostaMarcada === gabarito[q]){
+                nota++;
+            }
         }
     }
 
     return {respostasAluno, nota};
 }
-
 // =========================
 // CONTAR PIXELS ESCUROS
 // =========================
