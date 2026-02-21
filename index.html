@@ -3,59 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR - Resiliente</title>
+    <title>Calibrador OMR - Realtime</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; background: #000; overflow: hidden; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas-ui { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
         
+        /* Painel de Calibração */
+        #debug-panel { 
+            position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); 
+            color: #0f0; padding: 15px; border-radius: 10px; z-index: 100; font-size: 12px;
+            border: 1px solid #0f0; font-family: monospace;
+        }
+        .control-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 10px; }
+        .control-row button { padding: 5px 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+        
         #btn-disparo { 
             position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
             padding: 22px 40px; background: #28a745; color: white; border: none;
             border-radius: 50px; font-weight: bold; font-size: 18px; z-index: 100;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5); border: 2px solid #fff;
         }
 
-        .area-botoes-pos { position: fixed; bottom: 40px; left: 0; right: 0; display: none; justify-content: center; gap: 15px; z-index: 101; }
-        .btn-pos { padding: 20px 30px; border: none; border-radius: 50px; font-weight: bold; color: white; font-size: 16px; }
-
-        #painel { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 25px; border-radius: 25px 25px 0 0; display: none; z-index: 110; color: #333; max-height: 80vh; overflow-y: auto; }
-        #status { position: fixed; top: 20px; width: 100%; text-align: center; z-index: 20; color: white; font-size: 12px; font-weight: bold; text-shadow: 1px 1px 2px black; }
+        #status { position: fixed; top: 20px; left: 20px; z-index: 20; color: white; font-size: 12px; text-shadow: 1px 1px 2px black; }
     </style>
 </head>
 <body>
 
     <div id="status">BUSCANDO QR CODE...</div>
-    <button id="btn-disparo" onclick="capturarEProcessar()">📸 CAPTURAR AGORA</button>
 
-    <div class="area-botoes-pos" id="pos-botoes">
-        <button class="btn-pos" style="background:#dc3545;" onclick="resetar()">🔄 REPETIR</button>
-        <button class="btn-pos" style="background:#007bff;" onclick="exibirResultado()">✅ VER NOTA</button>
+    <div id="debug-panel">
+        <div style="text-align:center; font-weight:bold; margin-bottom:10px;">AJUSTE DE PRECISÃO</div>
+        <div class="control-row">
+            <span>X: <b id="val-offsetX">0</b></span>
+            <div>
+                <button onclick="ajustar('offsetX', -0.01)">-</button>
+                <button onclick="ajustar('offsetX', 0.01)">+</button>
+            </div>
+        </div>
+        <div class="control-row">
+            <span>Y: <b id="val-offsetY">0</b></span>
+            <div>
+                <button onclick="ajustar('offsetY', -0.01)">-</button>
+                <button onclick="ajustar('offsetY', 0.01)">+</button>
+            </div>
+        </div>
+        <div class="control-row">
+            <span>gapH: <b id="val-gapH">0</b></span>
+            <div>
+                <button onclick="ajustar('gapH', -0.005)">-</button>
+                <button onclick="ajustar('gapH', 0.005)">+</button>
+            </div>
+        </div>
+        <div class="control-row">
+            <span>gapV: <b id="val-gapV">0</b></span>
+            <div>
+                <button onclick="ajustar('gapV', -0.005)">-</button>
+                <button onclick="ajustar('gapV', 0.005)">+</button>
+            </div>
+        </div>
+        <hr>
+        <div style="font-size: 10px; color: #fff;">Mova os pontos até o centro das bolinhas.</div>
     </div>
+
+    <button id="btn-disparo" onclick="alert('Valores atuais: \n' + JSON.stringify(CONFIG))">VER VALORES FINAIS</button>
 
     <video id="video" playsinline style="display:none;"></video>
     <canvas id="canvas-ui"></canvas>
-
-    <div id="painel">
-        <h2 id="p-nome" style="margin:0; color: #007bff;"></h2>
-        <div id="p-detalhes" style="margin: 15px 0;"></div>
-        <button style="width:100%; padding:20px; background:#333; color:white; border:none; border-radius:15px; font-weight:bold;" onclick="resetar()">PRÓXIMA PROVA</button>
-    </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas-ui');
     const ctx = canvas.getContext('2d');
-    const btnDisparo = document.getElementById('btn-disparo');
-    const posBotoes = document.getElementById('pos-botoes');
     const statusTxt = document.getElementById('status');
     
-    const CONFIG = { offsetX: -0.12, offsetY: 1.42, gapH: 0.35, gapV: 0.28 };
+    // Valores iniciais para começar a calibração
+    let CONFIG = { offsetX: -0.12, offsetY: 1.42, gapH: 0.35, gapV: 0.28 };
 
-    let monitorando = true;
-    let cacheResultado = null;
-    let ultimaDeteccaoValida = null; // Memória do último QR Code lido
+    function atualizarDisplay() {
+        document.getElementById('val-offsetX').innerText = CONFIG.offsetX.toFixed(2);
+        document.getElementById('val-offsetY').innerText = CONFIG.offsetY.toFixed(2);
+        document.getElementById('val-gapH').innerText = CONFIG.gapH.toFixed(3);
+        document.getElementById('val-gapV').innerText = CONFIG.gapV.toFixed(3);
+    }
+
+    function ajustar(chave, valor) {
+        CONFIG[chave] += valor;
+        atualizarDisplay();
+    }
 
     async function iniciar() {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -63,11 +98,12 @@
         });
         video.srcObject = stream;
         video.play();
+        atualizarDisplay();
         requestAnimationFrame(loop);
     }
 
     function loop() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && monitorando) {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
@@ -76,116 +112,69 @@
             const qr = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (qr) {
-                const pontos = calcularPontos(qr);
-                desenharInterface(qr, pontos);
-                ultimaDeteccaoValida = { qr, pontos }; // Salva na memória
-                statusTxt.innerText = "SINAL OK - PRONTO PARA CAPTURAR";
-                statusTxt.style.color = "#00ff00";
-                btnDisparo.style.opacity = "1";
-            } else {
-                if (!ultimaDeteccaoValida) {
-                    statusTxt.innerText = "QR CODE NÃO ENCONTRADO";
-                    statusTxt.style.color = "#ff4444";
-                } else {
-                    statusTxt.innerText = "REPOSICIONE... (USANDO MEMÓRIA)";
-                    statusTxt.style.color = "#ffaa00";
-                    // Continua desenhando os pontos baseados na última posição conhecida
-                    desenharInterface(ultimaDeteccaoValida.qr, ultimaDeteccaoValida.pontos);
+                try {
+                    const pontos = calcularPontos(qr);
+                    desenharInterface(qr, pontos);
+                    statusTxt.innerText = "SINAL OK - CALIBRANDO...";
+                    statusTxt.style.color = "#00ff00";
+                } catch(e) { 
+                    statusTxt.innerText = "ERRO NA STRING DO QR"; 
                 }
+            } else {
+                statusTxt.innerText = "BUSCANDO QR CODE...";
+                statusTxt.style.color = "#ff4444";
             }
         }
-        if (monitorando) requestAnimationFrame(loop);
+        requestAnimationFrame(loop);
     }
 
     function calcularPontos(qr) {
         const tl = qr.location.topLeftCorner;
         const tr = qr.location.topRightCorner;
         const bl = qr.location.bottomLeftCorner;
+        
+        // Tamanho base do QR para escala
         const qrSize = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
         const vX = { x: (tr.x - tl.x) / qrSize, y: (tr.y - tl.y) / qrSize };
         const vY = { x: (bl.x - tl.x) / qrSize, y: (bl.y - tl.y) / qrSize };
 
-        const gabarito = qr.data.split('|')[2].split(':')[1];
+        // Pega o gabarito apenas para saber a quantidade de questões
+        const gabParte = qr.data.split('|')[2];
+        const gabarito = gabParte ? gabParte.split(':')[1] : "AAAAA"; 
+
         let lista = [];
         for (let i = 0; i < gabarito.length; i++) {
             for (let col = 0; col < 5; col++) {
+                // FÓRMULA MÁGICA DE POSICIONAMENTO
                 const px = tl.x + (vX.x * (CONFIG.offsetX + col * CONFIG.gapH) * qrSize) + (vY.x * (CONFIG.offsetY + i * CONFIG.gapV) * qrSize);
                 const py = tl.y + (vX.y * (CONFIG.offsetX + col * CONFIG.gapH) * qrSize) + (vY.y * (CONFIG.offsetY + i * CONFIG.gapV) * qrSize);
-                lista.push({ x: px, y: py, qIdx: i, letra: ['A','B','C','D','E'][col], resp: gabarito[i] });
+                lista.push({ x: px, y: py });
             }
         }
         return lista;
     }
 
     function desenharInterface(qr, pontos) {
+        // Desenha borda do QR
         ctx.strokeStyle = "#00ff00";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y, 10, 10);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y);
+        ctx.lineTo(qr.location.topRightCorner.x, qr.location.topRightCorner.y);
+        ctx.lineTo(qr.location.bottomRightCorner.x, qr.location.bottomRightCorner.y);
+        ctx.lineTo(qr.location.bottomLeftCorner.x, qr.location.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
         
+        // Desenha pontos de leitura
         pontos.forEach(p => {
-            ctx.fillStyle = "rgba(0, 255, 0, 0.4)";
-            ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill();
+            ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // Vermelho para ver melhor o erro
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 7); ctx.fill();
+            // Círculo verde em volta do ponto
+            ctx.strokeStyle = "#0f0";
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.stroke();
         });
-    }
-
-    function capturarEProcessar() {
-        if (!ultimaDeteccaoValida) {
-            alert("Aguarde o QR Code aparecer pelo menos uma vez.");
-            return;
-        }
-
-        const imgDataSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        monitorando = false; 
-        btnDisparo.style.display = 'none';
-        posBotoes.style.display = 'flex';
-
-        // Usa os pontos da última detecção válida
-        const { qr, pontos } = ultimaDeteccaoValida;
-        const gabarito = qr.data.split('|')[2].split(':')[1];
-        
-        let marcadas = new Array(gabarito.length).fill("Vazio");
-        let maiorInt = new Array(gabarito.length).fill(0);
-
-        pontos.forEach(p => {
-            const x = Math.floor(p.x);
-            const y = Math.floor(p.y);
-            if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
-                const idx = (y * canvas.width + x) * 4;
-                const esc = 255 - ((imgDataSnapshot.data[idx] + imgDataSnapshot.data[idx+1] + imgDataSnapshot.data[idx+2]) / 3);
-                if (esc > maiorInt[p.qIdx] && esc > 75) {
-                    maiorInt[p.qIdx] = esc;
-                    marcadas[p.qIdx] = p.letra;
-                }
-            }
-        });
-
-        let acertos = 0;
-        let html = "";
-        marcadas.forEach((m, i) => {
-            if (m === gabarito[i]) acertos++;
-            html += `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #eee;"><span>Q${i+1}: [${m}]</span> <span>${m===gabarito[i]?'✅':'❌'}</span></div>`;
-        });
-
-        cacheResultado = {
-            nome: qr.data.split('|')[0].split(':')[1],
-            html: `<h1>${acertos}/${gabarito.length}</h1><hr>${html}`
-        };
-    }
-
-    function exibirResultado() {
-        document.getElementById('p-nome').innerText = cacheResultado.nome;
-        document.getElementById('p-detalhes').innerHTML = cacheResultado.html;
-        document.getElementById('painel').style.display = 'block';
-        posBotoes.style.display = 'none';
-    }
-
-    function resetar() {
-        document.getElementById('painel').style.display = 'none';
-        posBotoes.style.display = 'none';
-        btnDisparo.style.display = 'block';
-        monitorando = true;
-        ultimaDeteccaoValida = null;
-        requestAnimationFrame(loop);
     }
 
     iniciar();
