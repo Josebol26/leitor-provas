@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Calibração - 90Q</title>
+    <title>Scanner OMR Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -11,14 +11,15 @@
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; }
         
         .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; width: 90%; 
+                  background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; width: 85%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
         
-        .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-        .control-group { flex: 1; margin: 0 5px; }
-        input[type=range] { width: 100%; }
-        #debug { font-size: 10px; color: #aaa; margin-top: 5px; font-family: monospace; }
-        #res-nota { font-size: 20px; color: #28a745; font-weight: bold; margin-bottom: 5px;}
+        #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
+        #status { font-weight: bold; font-size: 16px; margin-bottom: 10px; }
+        
+        button { padding: 15px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 18px; background: #007bff; }
+        #btn-confirmar { background: #28a745; display: none; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -26,58 +27,37 @@
     <canvas id="canvas"></canvas>
     
     <div class="painel">
-        <div id="status">AJUSTE A CALIBRAÇÃO</div>
+        <div id="status">MIRAR NO QR CODE</div>
+        <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
         
-        <div class="row">
-            <div class="control-group">
-                <label>OffX: <span id="voffsetX"></span></label>
-                <input type="range" id="offsetX" min="-5" max="5" step="0.01" value="-1.980">
-            </div>
-            <div class="control-group">
-                <label>OffY: <span id="voffsetY"></span></label>
-                <input type="range" id="offsetY" min="-5" max="5" step="0.01" value="0.960">
-            </div>
-        </div>
-        <div class="row">
-            <div class="control-group">
-                <label>GapH: <span id="vgapH"></span></label>
-                <input type="range" id="gapH" min="0" max="2" step="0.001" value="0.492">
-            </div>
-            <div class="control-group">
-                <label>GapV: <span id="vgapV"></span></label>
-                <input type="range" id="gapV" min="0" max="2" step="0.001" value="0.287">
-            </div>
-        </div>
-        <div class="row">
-            <div class="control-group">
-                <label>ColGap: <span id="vcolGap"></span></label>
-                <input type="range" id="colGap" min="0" max="5" step="0.01" value="1.300">
-            </div>
-        </div>
-        
-        <div id="debug">Aguardando...</div>
+        <button id="btn-capturar" onclick="capturar()">CAPTURAR</button>
+        <button id="btn-confirmar" onclick="proximo()">PRÓXIMO</button>
     </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-
-    // Mapeamento dos sliders
-    const sliderIds = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
-    const config = {};
-
-    function updateConfig() {
-        sliderIds.forEach(id => {
-            config[id] = parseFloat(document.getElementById(id).value);
-            document.getElementById('v' + id).innerText = config[id].toFixed(3);
-        });
-        config.threshold = 160;
-    }
+    const statusDiv = document.getElementById('status');
+    const resNomeDiv = document.getElementById('res-nome');
+    const resNotaDiv = document.getElementById('res-nota');
+    const btnCapturar = document.getElementById('btn-capturar');
+    const btnConfirmar = document.getElementById('btn-confirmar');
     
-    sliderIds.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
-    updateConfig();
+    let escaneando = true;
+    let congelado = false;
+    let dadosAtuais = null;
+
+    // --- SEUS VALORES FIXOS ---
+    const config = {
+        offsetX: -1.980, 
+        offsetY: 0.960,
+        gapH: 0.492,
+        gapV: 0.287,
+        colGap: 1.300,
+        threshold: 160
+    };
 
     async function iniciarCamera() {
         try {
@@ -95,6 +75,8 @@
     iniciarCamera();
 
     function tick() {
+        if (congelado) return;
+
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
@@ -105,18 +87,43 @@
 
             if (code) {
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/); 
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                 
                 if (matchData) {
-                    processar(code, matchData[2], matchData[1]);
+                    // Desenha o feedback visual (pontos) em tempo real
+                    processar(code, matchData[2], matchData[1], false);
+                    dadosAtuais = {code, gabarito: matchData[2], nome: matchData[1]};
+                    statusDiv.innerText = "PRONTO";
                 }
+            } else {
+                statusDiv.innerText = "MIRAR NO QR CODE";
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function processar(qr, gabarito, nome) {
-        // Cálculo Estável
+    function capturar() {
+        if (!dadosAtuais) return;
+        congelado = true;
+        btnCapturar.style.display = "none";
+        btnConfirmar.style.display = "block";
+        statusDiv.innerText = "CAPTURA CONGELADA";
+        
+        // Processa uma última vez para garantir a nota final
+        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true);
+    }
+
+    function proximo() {
+        congelado = false;
+        dadosAtuais = null;
+        btnCapturar.style.display = "block";
+        btnConfirmar.style.display = "none";
+        resNomeDiv.innerText = "";
+        resNotaDiv.innerText = "-- / --";
+        requestAnimationFrame(tick);
+    }
+
+    function processar(qr, gabarito, nome, finalizar) {
         const qrWidth = Math.sqrt(Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2));
         const qrHeight = Math.sqrt(Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2));
         const qrSize = (qrWidth + qrHeight) / 2;
@@ -154,7 +161,7 @@
                 }
                 const esc = totalEsc / pixels;
 
-                // Feedback visual aumentado
+                // Feedback visual
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill();
 
@@ -165,8 +172,10 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         
-        document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length} (${nome})`;
-        document.getElementById('debug').innerText = `X:${config.offsetX.toFixed(3)} Y:${config.offsetY.toFixed(3)} | H:${config.gapH.toFixed(3)} V:${config.gapV.toFixed(3)} | C:${config.colGap.toFixed(3)}`;
+        if (finalizar) {
+            resNomeDiv.innerText = nome;
+            resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
+        }
     }
 </script>
 </body>
