@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Final</title>
+    <title>Scanner OMR Pro - Ajustado</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -19,9 +19,8 @@
         #debug { font-size: 10px; color: #aaa; font-family: monospace; }
         #status { font-weight: bold; }
         
-        /* Botão para ler o próximo aluno */
-        #btn-prox { display: none; margin-top: 10px; padding: 10px; background: #28a745; 
-                    border: none; border-radius: 5px; color: white; width: 100%; font-weight: bold;}
+        button { margin-top: 10px; padding: 10px; background: #28a745; 
+                 border: none; border-radius: 5px; color: white; width: 100%; font-weight: bold;}
     </style>
 </head>
 <body>
@@ -33,7 +32,7 @@
         <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
         <div id="debug">Aguardando câmera...</div>
-        <button id="btn-prox" onclick="proximoAluno()">LER PRÓXIMO ALUNO</button>
+        <button id="btn-prox" style="display:none;" onclick="proximoAluno()">LER PRÓXIMO ALUNO</button>
     </div>
 
 <script>
@@ -46,6 +45,7 @@
     const btnProx = document.getElementById('btn-prox');
     
     let escaneando = true;
+    let timeoutCaptura = null;
 
     // --- SEUS VALORES APLICADOS ---
     const config = {
@@ -76,24 +76,41 @@
     iniciarCamera();
 
     function tick() {
-        if (!escaneando) return; // Trava a tela se já leu
+        if (!escaneando) return;
 
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // --- DESENHAR LINHA DE ENQUADRAMENTO ---
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 4;
+            const w = canvas.width * 0.6; // 60% da largura
+            const h = canvas.height * 0.3; // 30% da altura
+            ctx.strokeRect((canvas.width - w) / 2, (canvas.height - h) / 4, w, h);
+
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
                 const raw = code.data;
-                // Formato esperado: AL:Nome|GB:Gabarito
                 const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                 
-                if (matchData) {
-                    const nomeAluno = matchData[1];
-                    const gabarito = matchData[2];
-                    processar(code, gabarito, nomeAluno);
+                if (matchData && !timeoutCaptura) {
+                    statusDiv.innerText = "CENTRALIZANDO...";
+                    
+                    // --- DELAY DE 1 SEGUNDO ANTES DE PROCESSAR ---
+                    timeoutCaptura = setTimeout(() => {
+                        processar(code, matchData[2], matchData[1]);
+                    }, 1000);
+                }
+            } else {
+                // Se o QR sair da tela, cancela o delay
+                if(timeoutCaptura) {
+                    clearTimeout(timeoutCaptura);
+                    timeoutCaptura = null;
+                    statusDiv.innerText = "MIRAR NO QR CODE";
                 }
             }
         }
@@ -138,7 +155,8 @@
         resNomeDiv.innerText = nome;
         resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
         statusDiv.innerText = "RESULTADO FINAL";
-        btnProx.style.display = "block"; // Mostra botão
+        btnProx.style.display = "block";
+        timeoutCaptura = null;
     }
 
     function proximoAluno() {
