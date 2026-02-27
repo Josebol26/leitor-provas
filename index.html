@@ -18,6 +18,7 @@
         .control-group { flex: 1; margin: 0 5px; }
         input[type=range] { width: 100%; }
         #debug { font-size: 10px; color: #aaa; margin-top: 5px; font-family: monospace; }
+        #status { font-weight: bold; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -25,32 +26,32 @@
     <canvas id="canvas"></canvas>
     
     <div class="painel">
-        <div id="status">MIRAR NO QR CODE</div>
+        <div id="status">INICIALIZANDO CÂMERA...</div>
         <div id="res-nota" style="font-size:24px; color:#28a745; font-weight:bold;">-- / --</div>
         
         <div class="row">
             <div class="control-group">
-                <label>OffX: <span id="vOffX"></span></label>
+                <label>OffX: <span id="voffsetX"></span></label>
                 <input type="range" id="offsetX" min="-2" max="2" step="0.01" value="-0.50">
             </div>
             <div class="control-group">
-                <label>OffY: <span id="vOffY"></span></label>
+                <label>OffY: <span id="voffsetY"></span></label>
                 <input type="range" id="offsetY" min="-2" max="2" step="0.01" value="1.50">
             </div>
         </div>
         <div class="row">
             <div class="control-group">
-                <label>GapH: <span id="vGapH"></span></label>
+                <label>GapH: <span id="vgapH"></span></label>
                 <input type="range" id="gapH" min="0" max="0.5" step="0.001" value="0.150">
             </div>
             <div class="control-group">
-                <label>GapV: <span id="vGapV"></span></label>
+                <label>GapV: <span id="vgapV"></span></label>
                 <input type="range" id="gapV" min="0" max="0.5" step="0.001" value="0.130">
             </div>
         </div>
         <div class="row">
             <div class="control-group">
-                <label>ColGap: <span id="vColGap"></span></label>
+                <label>ColGap: <span id="vcolGap"></span></label>
                 <input type="range" id="colGap" min="0" max="2" step="0.01" value="1.15">
             </div>
         </div>
@@ -62,26 +63,51 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
 
     // Mapeamento dos sliders
-    const sliders = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
+    const sliderIds = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
     const config = {};
 
     function updateConfig() {
-        sliders.forEach(id => {
+        sliderIds.forEach(id => {
             config[id] = parseFloat(document.getElementById(id).value);
-            document.getElementById('v' + id.charAt(0).toUpperCase() + id.slice(1)).innerText = config[id].toFixed(3);
+            document.getElementById('v' + id).innerText = config[id].toFixed(3);
         });
         config.threshold = 160;
     }
     
     // Atualiza config ao mover sliders
-    sliders.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
+    sliderIds.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
     updateConfig();
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
-        video.srcObject = s; video.play(); requestAnimationFrame(tick);
-    });
+    // --- BLOCO DA CÂMERA FORÇADO ---
+    async function iniciarCamera() {
+        try {
+            statusDiv.innerText = "SOLICITANDO CÂMERA...";
+            
+            // Tenta forçar a câmera traseira
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" } 
+            });
+            
+            video.srcObject = stream;
+            video.play();
+            requestAnimationFrame(tick);
+            statusDiv.innerText = "MIRAR NO QR CODE";
+            document.getElementById('debug').innerText = "Câmera ativa.";
+            
+        } catch (err) {
+            console.error("Erro completo:", err);
+            statusDiv.innerText = "ERRO DE CÂMERA";
+            document.getElementById('debug').innerText = err.message;
+            
+            alert("Acesse o cadeado 🔒 na barra de endereço e permita o uso da Câmera.");
+        }
+    }
+
+    // Inicia a câmera
+    iniciarCamera();
 
     function tick() {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
@@ -93,10 +119,10 @@
 
             if (code) {
                 const raw = code.data;
-                const matchGab = raw.match(/GB:([A-E]+)/); // Ajustado para o formato do PDF: AL:Nome|GB:Gabarito
+                const matchGab = raw.match(/GB:([A-E]+)/); 
                 if (matchGab) {
                     const gabarito = matchGab[1];
-                    document.getElementById('debug').innerText = `GAB: ${gabarito.length} Qs | Mova os sliders para ajustar os pontos`;
+                    document.getElementById('debug').innerText = `GAB: ${gabarito.length} Qs | Ajuste os sliders!`;
                     processar(code, gabarito);
                 }
             }
@@ -128,7 +154,7 @@
 
                 // Feedback visual
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
-                ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
+                ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
 
                 if (esc > config.threshold && esc > maxEsc) {
                     maxEsc = esc; marcada = alt;
@@ -138,8 +164,8 @@
         }
         document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
         
-        // Exibe os valores atuais para você me mandar
-        document.getElementById('debug').innerText = `OFFX:${config.offsetX} | OFFY:${config.offsetY} | GAPH:${config.gapH} | GAPV:${config.gapV} | CGAP:${config.colGap}`;
+        // Exibe os valores para você me mandar
+        document.getElementById('debug').innerText = `X:${config.offsetX.toFixed(2)} Y:${config.offsetY.toFixed(2)} | H:${config.gapH.toFixed(3)} V:${config.gapV.toFixed(3)} | C:${config.colGap.toFixed(2)}`;
     }
 </script>
 </body>
