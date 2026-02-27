@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Calibração - 90Q</title>
+    <title>Scanner OMR Pro - Final</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -11,14 +11,16 @@
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
         
         .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; width: 90%; 
+                  background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; width: 85%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
         
-        .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-        .control-group { flex: 1; margin: 0 5px; }
-        input[type=range] { width: 100%; }
-        #debug { font-size: 10px; color: #aaa; margin-top: 5px; font-family: monospace; }
-        #res-nota { font-size: 20px; color: #28a745; font-weight: bold; margin-bottom: 5px;}
+        #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
+        #debug { font-size: 10px; color: #aaa; font-family: monospace; }
+        #status { font-weight: bold; }
+        
+        button { margin-top: 10px; padding: 12px; background: #28a745; 
+                 border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px;}
     </style>
 </head>
 <body>
@@ -27,34 +29,10 @@
     
     <div class="painel">
         <div id="status">MIRAR NO QR CODE</div>
+        <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
         
-        <div class="row">
-            <div class="control-group">
-                <label>OffX: <span id="voffsetX"></span></label>
-                <input type="range" id="offsetX" min="-5" max="5" step="0.01" value="-2.10">
-            </div>
-            <div class="control-group">
-                <label>OffY: <span id="voffsetY"></span></label>
-                <input type="range" id="offsetY" min="-5" max="5" step="0.01" value="1.00">
-            </div>
-        </div>
-        <div class="row">
-            <div class="control-group">
-                <label>GapH: <span id="vgapH"></span></label>
-                <input type="range" id="gapH" min="0" max="2" step="0.001" value="0.550">
-            </div>
-            <div class="control-group">
-                <label>GapV: <span id="vgapV"></span></label>
-                <input type="range" id="gapV" min="0" max="2" step="0.001" value="0.320">
-            </div>
-        </div>
-        <div class="row">
-            <div class="control-group">
-                <label>ColGap: <span id="vcolGap"></span></label>
-                <input type="range" id="colGap" min="0" max="5" step="0.01" value="1.300">
-            </div>
-        </div>
+        <button id="btn-prox" style="display:none;" onclick="proximoAluno()">LER PRÓXIMO</button>
         
         <div id="debug">Aguardando...</div>
     </div>
@@ -63,21 +41,23 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-
-    // Mapeamento dos sliders
-    const sliderIds = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
-    const config = {};
-
-    function updateConfig() {
-        sliderIds.forEach(id => {
-            config[id] = parseFloat(document.getElementById(id).value);
-            document.getElementById('v' + id).innerText = config[id].toFixed(3);
-        });
-        config.threshold = 160;
-    }
+    const statusDiv = document.getElementById('status');
+    const resNomeDiv = document.getElementById('res-nome');
+    const resNotaDiv = document.getElementById('res-nota');
+    const btnProx = document.getElementById('btn-prox');
     
-    sliderIds.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
-    updateConfig();
+    let escaneando = true;
+    let timeoutCaptura = null;
+
+    // --- SEUS VALORES FINAIS APLICADOS ---
+    const config = {
+        offsetX: -2.130, 
+        offsetY: 0.960,
+        gapH: 0.555,
+        gapV: 0.316,
+        colGap: 1.300,
+        threshold: 160
+    };
 
     async function iniciarCamera() {
         try {
@@ -95,6 +75,8 @@
     iniciarCamera();
 
     function tick() {
+        if (!escaneando) return;
+
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
@@ -104,7 +86,7 @@
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                // --- DESENHAR RETÂNGULO GUIA ---
+                // Desenhar retângulo guia
                 ctx.strokeStyle = "red";
                 ctx.lineWidth = 4;
                 ctx.strokeRect(
@@ -115,10 +97,21 @@
                 );
 
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/); 
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                 
-                if (matchData) {
-                    processar(code, matchData[2], matchData[1]);
+                if (matchData && !timeoutCaptura) {
+                    statusDiv.innerText = "CAPTURING...";
+                    
+                    // Pequeno delay para estabilizar
+                    timeoutCaptura = setTimeout(() => {
+                        processar(code, matchData[2], matchData[1]);
+                    }, 500);
+                }
+            } else {
+                if(timeoutCaptura) {
+                    clearTimeout(timeoutCaptura);
+                    timeoutCaptura = null;
+                    statusDiv.innerText = "MIRAR NO QR CODE";
                 }
             }
         }
@@ -126,10 +119,8 @@
     }
 
     function processar(qr, gabarito, nome) {
-        // Cálculo baseado no centro do QR
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomLeftCorner.y) / 2;
-        
         const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
         const qrSize = (qrW + qrH) / 2;
@@ -155,7 +146,6 @@
                 const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
                 const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
-                // Feedback visual: cyan = lido, red = vazio
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
 
@@ -166,10 +156,22 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         
-        document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length} (${nome})`;
-        
-        // Exibe os valores para conferência
-        document.getElementById('debug').innerText = `X:${config.offsetX.toFixed(3)} Y:${config.offsetY.toFixed(3)} | H:${config.gapH.toFixed(3)} V:${config.gapV.toFixed(3)} | C:${config.colGap.toFixed(3)}`;
+        // --- TRAVAR A TELA E MOSTRAR RESULTADO ---
+        escaneando = false;
+        resNomeDiv.innerText = nome;
+        resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
+        statusDiv.innerText = "RESULTADO FINAL";
+        btnProx.style.display = "block";
+        timeoutCaptura = null;
+    }
+
+    function proximoAluno() {
+        escaneando = true;
+        resNomeDiv.innerText = "";
+        resNotaDiv.innerText = "-- / --";
+        statusDiv.innerText = "MIRAR NO QR CODE";
+        btnProx.style.display = "none";
+        requestAnimationFrame(tick);
     }
 </script>
 </body>
