@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Seguro</title>
+    <title>Scanner OMR Pro - Proporcional</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -63,7 +63,7 @@
         gapV: 0.316,
         colGap: 1.300,
         threshold: 160,
-        toleranciaPosicao: 20 // Pixels de tolerância para o QR Code estar centralizado
+        toleranciaPosicao: 30 // Aumentado um pouco para facilitar
     };
 
     async function iniciarCamera() {
@@ -89,11 +89,11 @@
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // --- DESENHAR RETÂNGULO GUIA FIXO ---
+            // --- RETÂNGULO GUIA FIXO ---
             ctx.strokeStyle = "red";
             ctx.lineWidth = 4;
-            const guiaW = canvas.width * 0.4;
-            const guiaH = canvas.height * 0.2;
+            const guiaW = canvas.width * 0.5;
+            const guiaH = canvas.height * 0.25;
             const guiaX = (canvas.width - guiaW) / 2;
             const guiaY = (canvas.height - guiaH) / 3;
             ctx.strokeRect(guiaX, guiaY, guiaW, guiaH);
@@ -105,7 +105,6 @@
                 const qrCenterX = (code.location.topLeftCorner.x + code.location.topRightCorner.x) / 2;
                 const qrCenterY = (code.location.topLeftCorner.y + code.location.bottomLeftCorner.y) / 2;
                 
-                // --- TRAVA DE SEGURANÇA: VERIFICA SE ESTÁ CENTRALIZADO ---
                 const erroX = Math.abs(qrCenterX - (guiaX + guiaW/2));
                 const erroY = Math.abs(qrCenterY - (guiaY + guiaH/2));
 
@@ -115,7 +114,7 @@
                     
                     if (matchData) {
                         statusDiv.innerText = "ALINHADO! CONGELANDO...";
-                        ctx.strokeStyle = "#28a745"; // Fica verde quando alinhado
+                        ctx.strokeStyle = "#28a745"; // Verde
                         ctx.strokeRect(
                             code.location.topLeftCorner.x,
                             code.location.topLeftCorner.y,
@@ -123,7 +122,6 @@
                             code.location.bottomLeftCorner.y - code.location.topLeftCorner.y
                         );
                         
-                        // Congela a tela para conferência
                         escaneando = false;
                         dadosAtuais = {code, gabarito: matchData[2], nome: matchData[1]};
                         processar(code, matchData[2], matchData[1]);
@@ -133,7 +131,6 @@
                     }
                 } else {
                     statusDiv.innerText = "AJUSTE O ENQUADRAMENTO";
-                    document.getElementById('debug').innerText = `Erro: X:${erroX.toFixed(0)} Y:${erroY.toFixed(0)}`;
                 }
             } else {
                 statusDiv.innerText = "MIRAR NO QR CODE";
@@ -143,8 +140,11 @@
     }
 
     function processar(qr, gabarito, nome) {
+        // --- CÁLCULO DE PROPORÇÃO MELHORADO ---
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomLeftCorner.y) / 2;
+        
+        // Usa a média da largura e altura para estabilizar
         const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
         const qrSize = (qrW + qrH) / 2;
@@ -196,7 +196,6 @@
     }
 
     function finalizarCaptura() {
-        // Aqui você pode adicionar lógica para enviar os dados para um servidor
         alert("Nota de " + dadosAtuais.nome + " registrada!");
         cancelarCaptura();
     }
