@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro</title>
+    <title>Scanner OMR Ajuste Fino</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -16,9 +16,12 @@
         
         #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
         #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
-        #status { font-weight: bold; font-size: 16px; margin-bottom: 10px; }
+        #status { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
         
-        button { padding: 15px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 18px; background: #007bff; }
+        .control-group { margin-bottom: 10px; font-size: 12px; }
+        input[type=range] { width: 100%; }
+        
+        button { padding: 12px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px; background: #007bff; }
         #btn-confirmar { background: #28a745; display: none; margin-top: 10px; }
     </style>
 </head>
@@ -30,6 +33,11 @@
         <div id="status">MIRAR NO QR CODE</div>
         <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
+        
+        <div class="control-group">
+            <label>Limiar de Escuridão (Threshold): <span id="vthresh">160</span></label>
+            <input type="range" id="threshold" min="50" max="250" step="1" value="160">
+        </div>
         
         <button id="btn-capturar" onclick="capturar()">CAPTURAR</button>
         <button id="btn-confirmar" onclick="proximo()">PRÓXIMO</button>
@@ -44,10 +52,19 @@
     const resNotaDiv = document.getElementById('res-nota');
     const btnCapturar = document.getElementById('btn-capturar');
     const btnConfirmar = document.getElementById('btn-confirmar');
+    const thresholdSlider = document.getElementById('threshold');
+    const vthreshSpan = document.getElementById('vthresh');
     
     let escaneando = true;
     let congelado = false;
     let dadosAtuais = null;
+    let thresholdValue = 160;
+
+    // Atualiza o limiar em tempo real
+    thresholdSlider.addEventListener('input', () => {
+        thresholdValue = parseInt(thresholdSlider.value);
+        vthreshSpan.innerText = thresholdValue;
+    });
 
     // --- SEUS VALORES FIXOS ---
     const config = {
@@ -55,8 +72,7 @@
         offsetY: 0.960,
         gapH: 0.492,
         gapV: 0.287,
-        colGap: 1.300,
-        threshold: 160
+        colGap: 1.300
     };
 
     async function iniciarCamera() {
@@ -90,7 +106,6 @@
                 const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                 
                 if (matchData) {
-                    // Desenha o feedback visual (pontos) em tempo real
                     processar(code, matchData[2], matchData[1], false);
                     dadosAtuais = {code, gabarito: matchData[2], nome: matchData[1]};
                     statusDiv.innerText = "PRONTO";
@@ -108,8 +123,6 @@
         btnCapturar.style.display = "none";
         btnConfirmar.style.display = "block";
         statusDiv.innerText = "CAPTURA CONGELADA";
-        
-        // Processa uma última vez para garantir a nota final
         processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true);
     }
 
@@ -161,11 +174,11 @@
                 }
                 const esc = totalEsc / pixels;
 
-                // Feedback visual
-                ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
+                // --- FEEDBACK VISUAL USANDO O THRESHOLD DO SLIDER ---
+                ctx.fillStyle = esc > thresholdValue ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill();
 
-                if (esc > config.threshold && esc > maxEsc) {
+                if (esc > thresholdValue && esc > maxEsc) {
                     maxEsc = esc; marcada = alt;
                 }
             }
