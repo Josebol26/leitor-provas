@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro</title>
+    <title>Scanner OMR Pro - Estável</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
-        #video { width: 100vw; height: 100vh; object-fit: cover; }
-        #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+        /* CORREÇÃO: object-fit: contain garante que a imagem não estique */
+        #video { width: 100vw; height: 100vh; object-fit: contain; }
+        #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; }
         
         .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
                   background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; width: 85%; 
@@ -63,7 +64,7 @@
         gapV: 0.316,
         colGap: 1.300,
         threshold: 160,
-        toleranciaPosicao: 30
+        toleranciaPosicao: 25 // Mais rigoroso
     };
 
     async function iniciarCamera() {
@@ -85,15 +86,16 @@
         if (!escaneando) return;
 
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            // Garante que o canvas tenha o tamanho real do vídeo
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Retângulo guia
+            // Retângulo guia (alinhador visual)
             ctx.strokeStyle = "red";
             ctx.lineWidth = 4;
-            const guiaW = canvas.width * 0.5;
-            const guiaH = canvas.height * 0.25;
+            const guiaW = canvas.width * 0.4;
+            const guiaH = canvas.height * 0.2;
             const guiaX = (canvas.width - guiaW) / 2;
             const guiaY = (canvas.height - guiaH) / 3;
             ctx.strokeRect(guiaX, guiaY, guiaW, guiaH);
@@ -116,6 +118,7 @@
                     if (matchData) {
                         statusDiv.innerText = "ALINHADO! CONGELANDO...";
                         ctx.strokeStyle = "#28a745"; // Verde
+                        // Desenha o contorno do QR Code detectado para confirmar o alinhamento
                         ctx.beginPath();
                         ctx.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
                         ctx.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
@@ -142,12 +145,12 @@
     }
 
     function processar(qr, gabarito, nome) {
-        // --- CÁLCULO ESTÁVEL ---
+        // --- CÁLCULO DE PROPORÇÃO IGNO RANDO O ESTICAMENTO ---
         const qrWidth = Math.sqrt(Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2));
         const qrHeight = Math.sqrt(Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2));
         const qrSize = (qrWidth + qrHeight) / 2;
         
-        // Ponto de referência centralizado
+        // Centro real do QR Code
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.bottomRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomRightCorner.y) / 2;
 
@@ -164,7 +167,6 @@
             let maxEsc = 0;
 
             for (let alt = 0; alt < 5; alt++) {
-                // Cálculo das bolhas garantindo o ponto de origem correto
                 const x = qrCenterX + qrSize * (posX + (alt * config.gapH));
                 const y = qrCenterY + qrSize * posY;
 
