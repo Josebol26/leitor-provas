@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Final</title>
+    <title>Scanner OMR Seguro</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -17,10 +17,12 @@
         #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
         #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
         #debug { font-size: 10px; color: #aaa; font-family: monospace; }
-        #status { font-weight: bold; }
+        #status { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
         
-        button { margin-top: 10px; padding: 12px; background: #28a745; 
-                 border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px;}
+        .botoes-container { display: flex; gap: 10px; }
+        button { padding: 12px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px;}
+        #btn-confirmar { background: #28a745; display: none; }
+        #btn-cancelar { background: #dc3545; display: none; }
     </style>
 </head>
 <body>
@@ -32,7 +34,10 @@
         <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
         
-        <button id="btn-prox" style="display:none;" onclick="proximoAluno()">LER PRÓXIMO</button>
+        <div class="botoes-container">
+            <button id="btn-cancelar" onclick="cancelarCaptura()">CANCELAR</button>
+            <button id="btn-confirmar" onclick="finalizarCaptura()">CONFIRMAR</button>
+        </div>
         
         <div id="debug">Aguardando...</div>
     </div>
@@ -44,10 +49,11 @@
     const statusDiv = document.getElementById('status');
     const resNomeDiv = document.getElementById('res-nome');
     const resNotaDiv = document.getElementById('res-nota');
-    const btnProx = document.getElementById('btn-prox');
+    const btnConfirmar = document.getElementById('btn-confirmar');
+    const btnCancelar = document.getElementById('btn-cancelar');
     
     let escaneando = true;
-    let timeoutCaptura = null;
+    let dadosAtuais = null;
 
     // --- SEUS VALORES FINAIS APLICADOS ---
     const config = {
@@ -56,7 +62,8 @@
         gapH: 0.555,
         gapV: 0.316,
         colGap: 1.300,
-        threshold: 160
+        threshold: 160,
+        toleranciaPosicao: 20 // Pixels de tolerância para o QR Code estar centralizado
     };
 
     async function iniciarCamera() {
@@ -82,37 +89,54 @@
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
+            // --- DESENHAR RETÂNGULO GUIA FIXO ---
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 4;
+            const guiaW = canvas.width * 0.4;
+            const guiaH = canvas.height * 0.2;
+            const guiaX = (canvas.width - guiaW) / 2;
+            const guiaY = (canvas.height - guiaH) / 3;
+            ctx.strokeRect(guiaX, guiaY, guiaW, guiaH);
+
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                // Desenhar retângulo guia
-                ctx.strokeStyle = "red";
-                ctx.lineWidth = 4;
-                ctx.strokeRect(
-                    code.location.topLeftCorner.x,
-                    code.location.topLeftCorner.y,
-                    code.location.topRightCorner.x - code.location.topLeftCorner.x,
-                    code.location.bottomLeftCorner.y - code.location.topLeftCorner.y
-                );
-
-                const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
+                const qrCenterX = (code.location.topLeftCorner.x + code.location.topRightCorner.x) / 2;
+                const qrCenterY = (code.location.topLeftCorner.y + code.location.bottomLeftCorner.y) / 2;
                 
-                if (matchData && !timeoutCaptura) {
-                    statusDiv.innerText = "CAPTURING...";
+                // --- TRAVA DE SEGURANÇA: VERIFICA SE ESTÁ CENTRALIZADO ---
+                const erroX = Math.abs(qrCenterX - (guiaX + guiaW/2));
+                const erroY = Math.abs(qrCenterY - (guiaY + guiaH/2));
+
+                if (erroX < config.toleranciaPosicao && erroY < config.toleranciaPosicao) {
+                    const raw = code.data;
+                    const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                     
-                    // Pequeno delay para estabilizar
-                    timeoutCaptura = setTimeout(() => {
+                    if (matchData) {
+                        statusDiv.innerText = "ALINHADO! CONGELANDO...";
+                        ctx.strokeStyle = "#28a745"; // Fica verde quando alinhado
+                        ctx.strokeRect(
+                            code.location.topLeftCorner.x,
+                            code.location.topLeftCorner.y,
+                            code.location.topRightCorner.x - code.location.topLeftCorner.x,
+                            code.location.bottomLeftCorner.y - code.location.topLeftCorner.y
+                        );
+                        
+                        // Congela a tela para conferência
+                        escaneando = false;
+                        dadosAtuais = {code, gabarito: matchData[2], nome: matchData[1]};
                         processar(code, matchData[2], matchData[1]);
-                    }, 500);
+                        
+                        btnConfirmar.style.display = "block";
+                        btnCancelar.style.display = "block";
+                    }
+                } else {
+                    statusDiv.innerText = "AJUSTE O ENQUADRAMENTO";
+                    document.getElementById('debug').innerText = `Erro: X:${erroX.toFixed(0)} Y:${erroY.toFixed(0)}`;
                 }
             } else {
-                if(timeoutCaptura) {
-                    clearTimeout(timeoutCaptura);
-                    timeoutCaptura = null;
-                    statusDiv.innerText = "MIRAR NO QR CODE";
-                }
+                statusDiv.innerText = "MIRAR NO QR CODE";
             }
         }
         requestAnimationFrame(tick);
@@ -156,22 +180,25 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         
-        // --- TRAVAR A TELA E MOSTRAR RESULTADO ---
-        escaneando = false;
         resNomeDiv.innerText = nome;
         resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
-        statusDiv.innerText = "RESULTADO FINAL";
-        btnProx.style.display = "block";
-        timeoutCaptura = null;
+        statusDiv.innerText = "CONFERIR E CONFIRMAR";
     }
 
-    function proximoAluno() {
+    function cancelarCaptura() {
         escaneando = true;
+        dadosAtuais = null;
+        btnConfirmar.style.display = "none";
+        btnCancelar.style.display = "none";
         resNomeDiv.innerText = "";
         resNotaDiv.innerText = "-- / --";
-        statusDiv.innerText = "MIRAR NO QR CODE";
-        btnProx.style.display = "none";
         requestAnimationFrame(tick);
+    }
+
+    function finalizarCaptura() {
+        // Aqui você pode adicionar lógica para enviar os dados para um servidor
+        alert("Nota de " + dadosAtuais.nome + " registrada!");
+        cancelarCaptura();
     }
 </script>
 </body>
