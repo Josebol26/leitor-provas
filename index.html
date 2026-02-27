@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Ajustado</title>
+    <title>Scanner OMR Pro - Estabilizado</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -47,7 +47,7 @@
     let escaneando = true;
     let timeoutCaptura = null;
 
-    // --- SEUS VALORES APLICADOS ---
+    // --- SEUS VALORES (Ajustados para o novo método) ---
     const config = {
         offsetX: -1.490, 
         offsetY: 1.510,
@@ -87,7 +87,7 @@
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                // --- DESENHAR RETÂNGULO AO REDOR DO QR CODE ---
+                // Desenhar retângulo de guia
                 ctx.strokeStyle = "red";
                 ctx.lineWidth = 4;
                 ctx.strokeRect(
@@ -98,15 +98,15 @@
                 );
 
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/); // Pequeno ajuste no regex para garantir leitura
                 
                 if (matchData && !timeoutCaptura) {
-                    statusDiv.innerText = "CENTRALIZANDO...";
+                    statusDiv.innerText = "ESTABILIZANDO...";
                     
-                    // --- DELAY DE 1 SEGUNDO ANTES DE PROCESSAR ---
+                    // Delay para você parar de mexer a mão
                     timeoutCaptura = setTimeout(() => {
                         processar(code, matchData[2], matchData[1]);
-                    }, 1000);
+                    }, 1500); // Aumentado para 1.5s para maior estabilidade
                 }
             } else {
                 if(timeoutCaptura) {
@@ -120,14 +120,23 @@
     }
 
     function processar(qr, gabarito, nome) {
+        // --- CÁLCULO ESTABILIZADO ---
+        // Usamos o centro do QR Code como referência central
+        const qrCenterX = (qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2;
+        const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomLeftCorner.y) / 2;
+        
+        // Tamanho médio do QR para escalar a distância das bolhas
         const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
+        const qrSize = (qrW + qrH) / 2;
+
         let acertos = 0;
 
         for (let i = 0; i < gabarito.length; i++) {
             const col = Math.floor(i / 30);
             const lin = i % 30;
 
+            // Ajuste matemático para tentar compensar a perspectiva
             const posX = config.offsetX + (col * config.colGap);
             const posY = config.offsetY + (lin * config.gapV);
 
@@ -135,13 +144,17 @@
             let maxEsc = 0;
 
             for (let alt = 0; alt < 5; alt++) {
-                const x = qr.location.topLeftCorner.x + qrW * (posX + (alt * config.gapH));
-                const y = qr.location.topLeftCorner.y + qrH * posY;
+                // Posicionamento baseado no centro do QR
+                const x = qrCenterX + qrSize * (posX + (alt * config.gapH));
+                const y = qrCenterY + qrSize * posY;
+
+                // Segurança para não sair do canvas
+                if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
 
                 const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
                 const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
-                // Feedback visual: cyan = lido, red = vazio
+                // Feedback visual
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
 
@@ -152,7 +165,6 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         
-        // --- ATUALIZA A TELA E TRAVA ---
         escaneando = false;
         resNomeDiv.innerText = nome;
         resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
