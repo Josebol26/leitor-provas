@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Estável</title>
+    <title>Scanner OMR Calibração - 90Q</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -14,13 +14,11 @@
                   background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; width: 90%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
         
-        #res-nota { font-size: 26px; color: #28a745; font-weight: bold; margin-bottom: 5px;}
-        #res-nome { font-size: 16px; color: white; margin-bottom: 5px; }
-        
-        .botoes-container { display: flex; gap: 10px; }
-        button { padding: 12px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px;}
-        #btn-confirmar { background: #28a745; display: none; }
-        #btn-cancelar { background: #dc3545; display: none; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+        .control-group { flex: 1; margin: 0 5px; }
+        input[type=range] { width: 100%; }
+        #debug { font-size: 10px; color: #aaa; margin-top: 5px; font-family: monospace; }
+        #res-nota { font-size: 20px; color: #28a745; font-weight: bold; margin-bottom: 5px;}
     </style>
 </head>
 <body>
@@ -29,37 +27,57 @@
     
     <div class="painel">
         <div id="status">MIRAR NO QR CODE</div>
-        <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
         
-        <div class="botoes-container">
-            <button id="btn-cancelar" onclick="cancelarCaptura()">CANCELAR</button>
-            <button id="btn-confirmar" onclick="proximoAluno()">PRÓXIMO</button>
+        <div class="row">
+            <div class="control-group">
+                <label>OffX: <span id="voffsetX"></span></label>
+                <input type="range" id="offsetX" min="-5" max="5" step="0.01" value="-2.10">
+            </div>
+            <div class="control-group">
+                <label>OffY: <span id="voffsetY"></span></label>
+                <input type="range" id="offsetY" min="-5" max="5" step="0.01" value="1.00">
+            </div>
         </div>
+        <div class="row">
+            <div class="control-group">
+                <label>GapH: <span id="vgapH"></span></label>
+                <input type="range" id="gapH" min="0" max="2" step="0.001" value="0.550">
+            </div>
+            <div class="control-group">
+                <label>GapV: <span id="vgapV"></span></label>
+                <input type="range" id="gapV" min="0" max="2" step="0.001" value="0.320">
+            </div>
+        </div>
+        <div class="row">
+            <div class="control-group">
+                <label>ColGap: <span id="vcolGap"></span></label>
+                <input type="range" id="colGap" min="0" max="5" step="0.01" value="1.300">
+            </div>
+        </div>
+        
+        <div id="debug">Aguardando...</div>
     </div>
 
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const statusDiv = document.getElementById('status');
-    const resNotaDiv = document.getElementById('res-nota');
-    const resNomeDiv = document.getElementById('res-nome');
-    const btnConfirmar = document.getElementById('btn-confirmar');
-    const btnCancelar = document.getElementById('btn-cancelar');
-    
-    let escaneando = true;
-    let dadosCapturados = null;
 
-    // --- SEUS VALORES CALIBRADOS ---
-    const config = {
-        offsetX: -2.080, 
-        offsetY: 0.960,
-        gapH: 0.550,
-        gapV: 0.316,
-        colGap: 1.300,
-        threshold: 160
-    };
+    // Mapeamento dos sliders
+    const sliderIds = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
+    const config = {};
+
+    function updateConfig() {
+        sliderIds.forEach(id => {
+            config[id] = parseFloat(document.getElementById(id).value);
+            document.getElementById('v' + id).innerText = config[id].toFixed(3);
+        });
+        config.threshold = 160;
+    }
+    
+    sliderIds.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
+    updateConfig();
 
     async function iniciarCamera() {
         try {
@@ -77,8 +95,6 @@
     iniciarCamera();
 
     function tick() {
-        if (!escaneando) return;
-
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
@@ -88,7 +104,7 @@
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                // Desenhar retângulo guia
+                // --- DESENHAR RETÂNGULO GUIA ---
                 ctx.strokeStyle = "red";
                 ctx.lineWidth = 4;
                 ctx.strokeRect(
@@ -99,20 +115,21 @@
                 );
 
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/); 
                 
                 if (matchData) {
-                    // Pré-processa para mostrar na tela
-                    processar(code, matchData[2], matchData[1], true);
+                    processar(code, matchData[2], matchData[1]);
                 }
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function processar(qr, gabarito, nome, apenasVisualizar = false) {
+    function processar(qr, gabarito, nome) {
+        // Cálculo baseado no centro do QR
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomLeftCorner.y) / 2;
+        
         const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
         const qrSize = (qrW + qrH) / 2;
@@ -138,6 +155,7 @@
                 const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
                 const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
+                // Feedback visual: cyan = lido, red = vazio
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
 
@@ -148,31 +166,10 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         
-        resNomeDiv.innerText = "Aluno: " + nome;
-        resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
+        document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length} (${nome})`;
         
-        if (apenasVisualizar) {
-            // Trava a tela para conferência
-            escaneando = false;
-            statusDiv.innerText = "CONFIRMAR LEITURA?";
-            btnConfirmar.style.display = "block";
-            btnCancelar.style.display = "block";
-        }
-    }
-
-    function cancelarCaptura() {
-        escaneando = true;
-        statusDiv.innerText = "MIRAR NO QR CODE";
-        btnConfirmar.style.display = "none";
-        btnCancelar.style.display = "none";
-        resNomeDiv.innerText = "";
-        resNotaDiv.innerText = "-- / --";
-        requestAnimationFrame(tick);
-    }
-
-    function proximoAluno() {
-        // Ação de confirmar e ir para o próximo
-        cancelarCaptura();
+        // Exibe os valores para conferência
+        document.getElementById('debug').innerText = `X:${config.offsetX.toFixed(3)} Y:${config.offsetY.toFixed(3)} | H:${config.gapH.toFixed(3)} V:${config.gapV.toFixed(3)} | C:${config.colGap.toFixed(3)}`;
     }
 </script>
 </body>
