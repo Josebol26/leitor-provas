@@ -3,24 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - 90Q Corrigido</title>
+    <title>Scanner OMR Calibração - 90Q</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
-        .painel { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.9); padding: 15px; border-radius: 12px; width: 85%; 
+        
+        .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
+                  background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; width: 90%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
+        
+        .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+        .control-group { flex: 1; margin: 0 5px; }
+        input[type=range] { width: 100%; }
+        #debug { font-size: 10px; color: #aaa; margin-top: 5px; font-family: monospace; }
     </style>
 </head>
 <body>
     <video id="video" playsinline></video>
     <canvas id="canvas"></canvas>
+    
     <div class="painel">
         <div id="status">MIRAR NO QR CODE</div>
-        <div id="res-nota" style="font-size:30px; color:#28a745; font-weight:bold;">-- / --</div>
-        <div id="debug" style="font-size:10px; color:#aaa;">Aguardando...</div>
+        <div id="res-nota" style="font-size:24px; color:#28a745; font-weight:bold;">-- / --</div>
+        
+        <div class="row">
+            <div class="control-group">
+                <label>OffX: <span id="vOffX"></span></label>
+                <input type="range" id="offsetX" min="-2" max="2" step="0.01" value="-0.50">
+            </div>
+            <div class="control-group">
+                <label>OffY: <span id="vOffY"></span></label>
+                <input type="range" id="offsetY" min="-2" max="2" step="0.01" value="1.50">
+            </div>
+        </div>
+        <div class="row">
+            <div class="control-group">
+                <label>GapH: <span id="vGapH"></span></label>
+                <input type="range" id="gapH" min="0" max="0.5" step="0.001" value="0.150">
+            </div>
+            <div class="control-group">
+                <label>GapV: <span id="vGapV"></span></label>
+                <input type="range" id="gapV" min="0" max="0.5" step="0.001" value="0.130">
+            </div>
+        </div>
+        <div class="row">
+            <div class="control-group">
+                <label>ColGap: <span id="vColGap"></span></label>
+                <input type="range" id="colGap" min="0" max="2" step="0.01" value="1.15">
+            </div>
+        </div>
+        
+        <div id="debug">Aguardando...</div>
     </div>
 
 <script>
@@ -28,15 +63,21 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
 
-    // AJUSTE DE COORDENADAS PARA 3 COLUNAS
-    const config = {
-        offsetX: -0.80,    // Valor negativo para puxar para a ESQUERDA (Coluna 1)
-        offsetY: 1.60,     // Distância para BAIXO do QR
-        gapH: 0.210,       
-        gapV: 0.155,       
-        colGap: 1.35,      // Distância entre colunas
-        threshold: 160    
-    };
+    // Mapeamento dos sliders
+    const sliders = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
+    const config = {};
+
+    function updateConfig() {
+        sliders.forEach(id => {
+            config[id] = parseFloat(document.getElementById(id).value);
+            document.getElementById('v' + id.charAt(0).toUpperCase() + id.slice(1)).innerText = config[id].toFixed(3);
+        });
+        config.threshold = 160;
+    }
+    
+    // Atualiza config ao mover sliders
+    sliders.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
+    updateConfig();
 
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
         video.srcObject = s; video.play(); requestAnimationFrame(tick);
@@ -52,10 +93,10 @@
 
             if (code) {
                 const raw = code.data;
-                const matchGab = raw.match(/GAB:([A-E]+)/);
+                const matchGab = raw.match(/GB:([A-E]+)/); // Ajustado para o formato do PDF: AL:Nome|GB:Gabarito
                 if (matchGab) {
                     const gabarito = matchGab[1];
-                    document.getElementById('debug').innerText = `Gabarito detectado: ${gabarito.length} questões`;
+                    document.getElementById('debug').innerText = `GAB: ${gabarito.length} Qs | Mova os sliders para ajustar os pontos`;
                     processar(code, gabarito);
                 }
             }
@@ -69,10 +110,9 @@
         let acertos = 0;
 
         for (let i = 0; i < gabarito.length; i++) {
-            const col = Math.floor(i / 30);
+            const col = Math.floor(i / 30); // 3 colunas de 30
             const lin = i % 30;
 
-            // posX agora soma o colGap para andar para a direita
             const posX = config.offsetX + (col * config.colGap);
             const posY = config.offsetY + (lin * config.gapV);
 
@@ -86,9 +126,9 @@
                 const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
                 const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
-                // Feedback visual: Azul para os sensores
+                // Feedback visual
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
-                ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill();
+                ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
 
                 if (esc > config.threshold && esc > maxEsc) {
                     maxEsc = esc; marcada = alt;
@@ -97,6 +137,9 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
+        
+        // Exibe os valores atuais para você me mandar
+        document.getElementById('debug').innerText = `OFFX:${config.offsetX} | OFFY:${config.offsetY} | GAPH:${config.gapH} | GAPV:${config.gapV} | CGAP:${config.colGap}`;
     }
 </script>
 </body>
