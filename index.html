@@ -83,17 +83,20 @@
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // --- DESENHAR LINHA DE ENQUADRAMENTO ---
-            ctx.strokeStyle = "red";
-            ctx.lineWidth = 4;
-            const w = canvas.width * 0.6; // 60% da largura
-            const h = canvas.height * 0.3; // 30% da altura
-            ctx.strokeRect((canvas.width - w) / 2, (canvas.height - h) / 4, w, h);
-
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
+                // --- DESENHAR RETÂNGULO AO REDOR DO QR CODE ---
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(
+                    code.location.topLeftCorner.x,
+                    code.location.topLeftCorner.y,
+                    code.location.topRightCorner.x - code.location.topLeftCorner.x,
+                    code.location.bottomLeftCorner.y - code.location.topLeftCorner.y
+                );
+
                 const raw = code.data;
                 const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                 
@@ -106,7 +109,6 @@
                     }, 1000);
                 }
             } else {
-                // Se o QR sair da tela, cancela o delay
                 if(timeoutCaptura) {
                     clearTimeout(timeoutCaptura);
                     timeoutCaptura = null;
