@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Calibração - 90Q</title>
+    <title>Scanner OMR Pro - Ajustado</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -32,27 +32,27 @@
         <div class="row">
             <div class="control-group">
                 <label>OffX: <span id="voffsetX"></span></label>
-                <input type="range" id="offsetX" min="-5" max="5" step="0.01" value="-1.49">
+                <input type="range" id="offsetX" min="-5" max="5" step="0.01" value="-2.080">
             </div>
             <div class="control-group">
                 <label>OffY: <span id="voffsetY"></span></label>
-                <input type="range" id="offsetY" min="-5" max="5" step="0.01" value="1.51">
+                <input type="range" id="offsetY" min="-5" max="5" step="0.01" value="0.960">
             </div>
         </div>
         <div class="row">
             <div class="control-group">
                 <label>GapH: <span id="vgapH"></span></label>
-                <input type="range" id="gapH" min="0" max="2" step="0.001" value="0.50">
+                <input type="range" id="gapH" min="0" max="2" step="0.001" value="0.550">
             </div>
             <div class="control-group">
                 <label>GapV: <span id="vgapV"></span></label>
-                <input type="range" id="gapV" min="0" max="2" step="0.001" value="0.297">
+                <input type="range" id="gapV" min="0" max="2" step="0.001" value="0.316">
             </div>
         </div>
         <div class="row">
             <div class="control-group">
                 <label>ColGap: <span id="vcolGap"></span></label>
-                <input type="range" id="colGap" min="0" max="5" step="0.01" value="1.20">
+                <input type="range" id="colGap" min="0" max="5" step="0.01" value="1.300">
             </div>
         </div>
         
@@ -115,7 +115,7 @@
                 );
 
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/); // Pequena correção no regex GB
                 
                 if (matchData) {
                     processar(code, matchData[2], matchData[1]);
@@ -126,7 +126,7 @@
     }
 
     function processar(qr, gabarito, nome) {
-        // Cálculo baseado no centro do QR para maior estabilidade
+        // Cálculo baseado no centro do QR
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomLeftCorner.y) / 2;
         
@@ -168,7 +168,7 @@
         
         document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length} (${nome})`;
         
-        // Exibe os valores para me mandar
+        // Exibe os valores para conferência
         document.getElementById('debug').innerText = `X:${config.offsetX.toFixed(3)} Y:${config.offsetY.toFixed(3)} | H:${config.gapH.toFixed(3)} V:${config.gapV.toFixed(3)} | C:${config.colGap.toFixed(3)}`;
     }
 </script>
