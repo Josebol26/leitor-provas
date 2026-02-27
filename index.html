@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro</title>
+    <title>Scanner OMR Pro - Estável</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
-        /* CORREÇÃO DE PROPORÇÃO MANTIDA */
         #video { width: 100vw; height: 100vh; object-fit: contain; }
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; }
         
@@ -56,7 +55,7 @@
     let escaneando = true;
     let dadosAtuais = null;
 
-    // --- SEUS VALORES FINAIS APLICADOS ---
+    // --- SEUS VALORES FINAIS ---
     const config = {
         offsetX: -1.980, 
         offsetY: 0.960,
@@ -64,7 +63,7 @@
         gapV: 0.287,
         colGap: 1.300,
         threshold: 160,
-        toleranciaPosicao: 25 // Rigoroso
+        toleranciaPosicao: 25 
     };
 
     async function iniciarCamera() {
@@ -90,7 +89,6 @@
             canvas.width = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Retângulo guia (alinhador visual)
             ctx.strokeStyle = "red";
             ctx.lineWidth = 4;
             const guiaW = canvas.width * 0.4;
@@ -103,7 +101,6 @@
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                // Ponto central do QR detectado
                 const qrCenterX = (code.location.topLeftCorner.x + code.location.bottomRightCorner.x) / 2;
                 const qrCenterY = (code.location.topLeftCorner.y + code.location.bottomRightCorner.y) / 2;
                 
@@ -117,7 +114,6 @@
                     if (matchData) {
                         statusDiv.innerText = "ALINHADO! CONGELANDO...";
                         ctx.strokeStyle = "#28a745"; // Verde
-                        // Desenha o contorno do QR Code
                         ctx.beginPath();
                         ctx.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
                         ctx.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
@@ -144,7 +140,6 @@
     }
 
     function processar(qr, gabarito, nome) {
-        // --- CÁLCULO ESTÁVEL ---
         const qrWidth = Math.sqrt(Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2));
         const qrHeight = Math.sqrt(Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2));
         const qrSize = (qrWidth + qrHeight) / 2;
@@ -170,11 +165,22 @@
 
                 if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
 
-                const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-                const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
+                // --- AMPLIAÇÃO DA ÁREA DE AMOSTRAGEM ---
+                // Verifica a média de uma área 3x3 em vez de apenas 1 pixel
+                let totalEsc = 0;
+                let pixels = 0;
+                for(let dx = -1; dx <= 1; dx++) {
+                    for(let dy = -1; dy <= 1; dy++) {
+                        const p = ctx.getImageData(Math.floor(x + dx), Math.floor(y + dy), 1, 1).data;
+                        totalEsc += 255 - ((p[0] + p[1] + p[2]) / 3);
+                        pixels++;
+                    }
+                }
+                const esc = totalEsc / pixels;
 
+                // --- AUMENTO DO FEEDBACK VISUAL ---
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
-                ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
+                ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill(); // Raio aumentado de 4 para 7
 
                 if (esc > config.threshold && esc > maxEsc) {
                     maxEsc = esc; marcada = alt;
