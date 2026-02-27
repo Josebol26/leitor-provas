@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Calibrado</title>
+    <title>Scanner OMR Pro - Final</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -14,9 +14,14 @@
                   background: rgba(0,0,0,0.9); padding: 15px; border-radius: 12px; width: 85%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
         
-        #res-nota { font-size: 30px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
         #debug { font-size: 10px; color: #aaa; font-family: monospace; }
         #status { font-weight: bold; }
+        
+        /* Botão para ler o próximo aluno */
+        #btn-prox { display: none; margin-top: 10px; padding: 10px; background: #28a745; 
+                    border: none; border-radius: 5px; color: white; width: 100%; font-weight: bold;}
     </style>
 </head>
 <body>
@@ -25,8 +30,10 @@
     
     <div class="painel">
         <div id="status">INICIALIZANDO...</div>
+        <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
         <div id="debug">Aguardando câmera...</div>
+        <button id="btn-prox" onclick="proximoAluno()">LER PRÓXIMO ALUNO</button>
     </div>
 
 <script>
@@ -34,18 +41,22 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusDiv = document.getElementById('status');
+    const resNomeDiv = document.getElementById('res-nome');
+    const resNotaDiv = document.getElementById('res-nota');
+    const btnProx = document.getElementById('btn-prox');
+    
+    let escaneando = true;
 
-    // --- SEUS VALORES APLICADOS AQUI ---
+    // --- SEUS VALORES APLICADOS ---
     const config = {
-        offsetX: -1.490, // Posição horizontal inicial
-        offsetY: 1.510,  // Posição vertical inicial
-        gapH: 0.500,     // Espaço entre alternativas A-E
-        gapV: 0.297,     // Espaço entre questões
-        colGap: 1.20,    // Espaço entre colunas (valor padrão ajustado)
-        threshold: 160   // Sensibilidade da leitura
+        offsetX: -1.490, 
+        offsetY: 1.510,
+        gapH: 0.500,
+        gapV: 0.297,
+        colGap: 1.20,
+        threshold: 160
     };
 
-    // --- BLOCO DA CÂMERA ---
     async function iniciarCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -65,6 +76,8 @@
     iniciarCamera();
 
     function tick() {
+        if (!escaneando) return; // Trava a tela se já leu
+
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.height = video.videoHeight;
             canvas.width = video.videoWidth;
@@ -74,23 +87,26 @@
 
             if (code) {
                 const raw = code.data;
-                const matchGab = raw.match(/GB:([A-E]+)/); 
-                if (matchGab) {
-                    const gabarito = matchGab[1];
-                    processar(code, gabarito);
+                // Formato esperado: AL:Nome|GB:Gabarito
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
+                
+                if (matchData) {
+                    const nomeAluno = matchData[1];
+                    const gabarito = matchData[2];
+                    processar(code, gabarito, nomeAluno);
                 }
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function processar(qr, gabarito) {
+    function processar(qr, gabarito, nome) {
         const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
         let acertos = 0;
 
         for (let i = 0; i < gabarito.length; i++) {
-            const col = Math.floor(i / 30); // 3 colunas de 30
+            const col = Math.floor(i / 30);
             const lin = i % 30;
 
             const posX = config.offsetX + (col * config.colGap);
@@ -116,8 +132,22 @@
             }
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
-        document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
-        document.getElementById('debug').innerText = `Gabarito lido (${gabarito.length} Qs)`;
+        
+        // --- ATUALIZA A TELA E TRAVA ---
+        escaneando = false;
+        resNomeDiv.innerText = nome;
+        resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
+        statusDiv.innerText = "RESULTADO FINAL";
+        btnProx.style.display = "block"; // Mostra botão
+    }
+
+    function proximoAluno() {
+        escaneando = true;
+        resNomeDiv.innerText = "";
+        resNotaDiv.innerText = "-- / --";
+        statusDiv.innerText = "MIRAR NO QR CODE";
+        btnProx.style.display = "none";
+        requestAnimationFrame(tick);
     }
 </script>
 </body>
