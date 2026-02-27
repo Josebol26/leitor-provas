@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Pro - Estabilizado</title>
+    <title>Scanner OMR Pro - Estável</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
         
-        .painel { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.9); padding: 15px; border-radius: 12px; width: 85%; 
+        .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
+                  background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; width: 90%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
         
-        #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
-        #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
-        #debug { font-size: 10px; color: #aaa; font-family: monospace; }
-        #status { font-weight: bold; }
+        #res-nota { font-size: 26px; color: #28a745; font-weight: bold; margin-bottom: 5px;}
+        #res-nome { font-size: 16px; color: white; margin-bottom: 5px; }
         
-        button { margin-top: 10px; padding: 10px; background: #28a745; 
-                 border: none; border-radius: 5px; color: white; width: 100%; font-weight: bold;}
+        .botoes-container { display: flex; gap: 10px; }
+        button { padding: 12px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px;}
+        #btn-confirmar { background: #28a745; display: none; }
+        #btn-cancelar { background: #dc3545; display: none; }
     </style>
 </head>
 <body>
@@ -28,11 +28,14 @@
     <canvas id="canvas"></canvas>
     
     <div class="painel">
-        <div id="status">INICIALIZANDO...</div>
+        <div id="status">MIRAR NO QR CODE</div>
         <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
-        <div id="debug">Aguardando câmera...</div>
-        <button id="btn-prox" style="display:none;" onclick="proximoAluno()">LER PRÓXIMO ALUNO</button>
+        
+        <div class="botoes-container">
+            <button id="btn-cancelar" onclick="cancelarCaptura()">CANCELAR</button>
+            <button id="btn-confirmar" onclick="proximoAluno()">PRÓXIMO</button>
+        </div>
     </div>
 
 <script>
@@ -40,20 +43,21 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusDiv = document.getElementById('status');
-    const resNomeDiv = document.getElementById('res-nome');
     const resNotaDiv = document.getElementById('res-nota');
-    const btnProx = document.getElementById('btn-prox');
+    const resNomeDiv = document.getElementById('res-nome');
+    const btnConfirmar = document.getElementById('btn-confirmar');
+    const btnCancelar = document.getElementById('btn-cancelar');
     
     let escaneando = true;
-    let timeoutCaptura = null;
+    let dadosCapturados = null;
 
-    // --- SEUS VALORES (Ajustados para o novo método) ---
+    // --- SEUS VALORES CALIBRADOS ---
     const config = {
-        offsetX: -1.490, 
-        offsetY: 1.510,
-        gapH: 0.500,
-        gapV: 0.297,
-        colGap: 1.20,
+        offsetX: -2.080, 
+        offsetY: 0.960,
+        gapH: 0.550,
+        gapV: 0.316,
+        colGap: 1.300,
         threshold: 160
     };
 
@@ -65,11 +69,8 @@
             video.srcObject = stream;
             video.play();
             requestAnimationFrame(tick);
-            statusDiv.innerText = "MIRAR NO QR CODE";
-            document.getElementById('debug').innerText = "Scanner ativo.";
         } catch (err) {
-            statusDiv.innerText = "ERRO DE CÂMERA";
-            alert("Permita o uso da Câmera no cadeado 🔒 da barra de endereço.");
+            alert("Erro de câmera: " + err);
         }
     }
 
@@ -87,7 +88,7 @@
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                // Desenhar retângulo de guia
+                // Desenhar retângulo guia
                 ctx.strokeStyle = "red";
                 ctx.lineWidth = 4;
                 ctx.strokeRect(
@@ -98,34 +99,20 @@
                 );
 
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/); // Pequeno ajuste no regex para garantir leitura
+                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
                 
-                if (matchData && !timeoutCaptura) {
-                    statusDiv.innerText = "ESTABILIZANDO...";
-                    
-                    // Delay para você parar de mexer a mão
-                    timeoutCaptura = setTimeout(() => {
-                        processar(code, matchData[2], matchData[1]);
-                    }, 1500); // Aumentado para 1.5s para maior estabilidade
-                }
-            } else {
-                if(timeoutCaptura) {
-                    clearTimeout(timeoutCaptura);
-                    timeoutCaptura = null;
-                    statusDiv.innerText = "MIRAR NO QR CODE";
+                if (matchData) {
+                    // Pré-processa para mostrar na tela
+                    processar(code, matchData[2], matchData[1], true);
                 }
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function processar(qr, gabarito, nome) {
-        // --- CÁLCULO ESTABILIZADO ---
-        // Usamos o centro do QR Code como referência central
+    function processar(qr, gabarito, nome, apenasVisualizar = false) {
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.topRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomLeftCorner.y) / 2;
-        
-        // Tamanho médio do QR para escalar a distância das bolhas
         const qrW = qr.location.topRightCorner.x - qr.location.topLeftCorner.x;
         const qrH = qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y;
         const qrSize = (qrW + qrH) / 2;
@@ -136,7 +123,6 @@
             const col = Math.floor(i / 30);
             const lin = i % 30;
 
-            // Ajuste matemático para tentar compensar a perspectiva
             const posX = config.offsetX + (col * config.colGap);
             const posY = config.offsetY + (lin * config.gapV);
 
@@ -144,17 +130,14 @@
             let maxEsc = 0;
 
             for (let alt = 0; alt < 5; alt++) {
-                // Posicionamento baseado no centro do QR
                 const x = qrCenterX + qrSize * (posX + (alt * config.gapH));
                 const y = qrCenterY + qrSize * posY;
 
-                // Segurança para não sair do canvas
                 if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
 
                 const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
                 const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
-                // Feedback visual
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
 
@@ -165,21 +148,31 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         
-        escaneando = false;
-        resNomeDiv.innerText = nome;
+        resNomeDiv.innerText = "Aluno: " + nome;
         resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
-        statusDiv.innerText = "RESULTADO FINAL";
-        btnProx.style.display = "block";
-        timeoutCaptura = null;
+        
+        if (apenasVisualizar) {
+            // Trava a tela para conferência
+            escaneando = false;
+            statusDiv.innerText = "CONFIRMAR LEITURA?";
+            btnConfirmar.style.display = "block";
+            btnCancelar.style.display = "block";
+        }
+    }
+
+    function cancelarCaptura() {
+        escaneando = true;
+        statusDiv.innerText = "MIRAR NO QR CODE";
+        btnConfirmar.style.display = "none";
+        btnCancelar.style.display = "none";
+        resNomeDiv.innerText = "";
+        resNotaDiv.innerText = "-- / --";
+        requestAnimationFrame(tick);
     }
 
     function proximoAluno() {
-        escaneando = true;
-        resNomeDiv.innerText = "";
-        resNotaDiv.innerText = "-- / --";
-        statusDiv.innerText = "MIRAR NO QR CODE";
-        btnProx.style.display = "none";
-        requestAnimationFrame(tick);
+        // Ação de confirmar e ir para o próximo
+        cancelarCaptura();
     }
 </script>
 </body>
