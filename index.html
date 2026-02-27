@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Seguro</title>
+    <title>Scanner OMR Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
@@ -102,8 +102,9 @@
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
-                const qrCenterX = (code.location.topLeftCorner.x + code.location.topRightCorner.x) / 2;
-                const qrCenterY = (code.location.topLeftCorner.y + code.location.bottomLeftCorner.y) / 2;
+                // Ponto central do QR detectado
+                const qrCenterX = (code.location.topLeftCorner.x + code.location.bottomRightCorner.x) / 2;
+                const qrCenterY = (code.location.topLeftCorner.y + code.location.bottomRightCorner.y) / 2;
                 
                 const erroX = Math.abs(qrCenterX - (guiaX + guiaW/2));
                 const erroY = Math.abs(qrCenterY - (guiaY + guiaH/2));
@@ -115,7 +116,6 @@
                     if (matchData) {
                         statusDiv.innerText = "ALINHADO! CONGELANDO...";
                         ctx.strokeStyle = "#28a745"; // Verde
-                        // Desenha o contorno do QR Code detectado
                         ctx.beginPath();
                         ctx.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
                         ctx.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
@@ -142,15 +142,12 @@
     }
 
     function processar(qr, gabarito, nome) {
-        // --- CÁLCULO DE PROPORÇÃO IGNO RANDO O ESTICAMENTO ---
-        // Calcula a largura e altura real do QR Code na imagem, independente de esticamento
+        // --- CÁLCULO ESTÁVEL ---
         const qrWidth = Math.sqrt(Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2));
         const qrHeight = Math.sqrt(Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2));
-        
-        // Define o tamanho base para o cálculo baseado na média dos lados reais
         const qrSize = (qrWidth + qrHeight) / 2;
         
-        // Centro real do QR Code
+        // Ponto de referência centralizado
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.bottomRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomRightCorner.y) / 2;
 
@@ -167,7 +164,7 @@
             let maxEsc = 0;
 
             for (let alt = 0; alt < 5; alt++) {
-                // Cálculo das bolhas corrigido para a perspectiva
+                // Cálculo das bolhas garantindo o ponto de origem correto
                 const x = qrCenterX + qrSize * (posX + (alt * config.gapH));
                 const y = qrCenterY + qrSize * posY;
 
