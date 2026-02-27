@@ -3,22 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Calibração - 90Q</title>
+    <title>Scanner OMR Pro - Calibrado</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
         #video { width: 100vw; height: 100vh; object-fit: cover; }
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
         
-        .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px; width: 90%; 
+        .painel { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); 
+                  background: rgba(0,0,0,0.9); padding: 15px; border-radius: 12px; width: 85%; 
                   border: 2px solid #28a745; color: white; text-align: center; }
         
-        .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-        .control-group { flex: 1; margin: 0 5px; }
-        input[type=range] { width: 100%; }
-        #debug { font-size: 10px; color: #aaa; margin-top: 5px; font-family: monospace; }
-        #status { font-weight: bold; margin-bottom: 5px; }
+        #res-nota { font-size: 30px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        #debug { font-size: 10px; color: #aaa; font-family: monospace; }
+        #status { font-weight: bold; }
     </style>
 </head>
 <body>
@@ -26,37 +24,9 @@
     <canvas id="canvas"></canvas>
     
     <div class="painel">
-        <div id="status">INICIALIZANDO CÂMERA...</div>
-        <div id="res-nota" style="font-size:24px; color:#28a745; font-weight:bold;">-- / --</div>
-        
-        <div class="row">
-            <div class="control-group">
-                <label>OffX: <span id="voffsetX"></span></label>
-                <input type="range" id="offsetX" min="-2" max="2" step="0.01" value="-0.50">
-            </div>
-            <div class="control-group">
-                <label>OffY: <span id="voffsetY"></span></label>
-                <input type="range" id="offsetY" min="-2" max="2" step="0.01" value="1.50">
-            </div>
-        </div>
-        <div class="row">
-            <div class="control-group">
-                <label>GapH: <span id="vgapH"></span></label>
-                <input type="range" id="gapH" min="0" max="0.5" step="0.001" value="0.150">
-            </div>
-            <div class="control-group">
-                <label>GapV: <span id="vgapV"></span></label>
-                <input type="range" id="gapV" min="0" max="0.5" step="0.001" value="0.130">
-            </div>
-        </div>
-        <div class="row">
-            <div class="control-group">
-                <label>ColGap: <span id="vcolGap"></span></label>
-                <input type="range" id="colGap" min="0" max="2" step="0.01" value="1.15">
-            </div>
-        </div>
-        
-        <div id="debug">Aguardando...</div>
+        <div id="status">INICIALIZANDO...</div>
+        <div id="res-nota">-- / --</div>
+        <div id="debug">Aguardando câmera...</div>
     </div>
 
 <script>
@@ -65,48 +35,33 @@
     const ctx = canvas.getContext('2d');
     const statusDiv = document.getElementById('status');
 
-    // Mapeamento dos sliders
-    const sliderIds = ['offsetX', 'offsetY', 'gapH', 'gapV', 'colGap'];
-    const config = {};
+    // --- SEUS VALORES APLICADOS AQUI ---
+    const config = {
+        offsetX: -1.490, // Posição horizontal inicial
+        offsetY: 1.510,  // Posição vertical inicial
+        gapH: 0.500,     // Espaço entre alternativas A-E
+        gapV: 0.297,     // Espaço entre questões
+        colGap: 1.20,    // Espaço entre colunas (valor padrão ajustado)
+        threshold: 160   // Sensibilidade da leitura
+    };
 
-    function updateConfig() {
-        sliderIds.forEach(id => {
-            config[id] = parseFloat(document.getElementById(id).value);
-            document.getElementById('v' + id).innerText = config[id].toFixed(3);
-        });
-        config.threshold = 160;
-    }
-    
-    // Atualiza config ao mover sliders
-    sliderIds.forEach(id => document.getElementById(id).addEventListener('input', updateConfig));
-    updateConfig();
-
-    // --- BLOCO DA CÂMERA FORÇADO ---
+    // --- BLOCO DA CÂMERA ---
     async function iniciarCamera() {
         try {
-            statusDiv.innerText = "SOLICITANDO CÂMERA...";
-            
-            // Tenta forçar a câmera traseira
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment" } 
             });
-            
             video.srcObject = stream;
             video.play();
             requestAnimationFrame(tick);
             statusDiv.innerText = "MIRAR NO QR CODE";
-            document.getElementById('debug').innerText = "Câmera ativa.";
-            
+            document.getElementById('debug').innerText = "Scanner ativo.";
         } catch (err) {
-            console.error("Erro completo:", err);
             statusDiv.innerText = "ERRO DE CÂMERA";
-            document.getElementById('debug').innerText = err.message;
-            
-            alert("Acesse o cadeado 🔒 na barra de endereço e permita o uso da Câmera.");
+            alert("Permita o uso da Câmera no cadeado 🔒 da barra de endereço.");
         }
     }
 
-    // Inicia a câmera
     iniciarCamera();
 
     function tick() {
@@ -122,7 +77,6 @@
                 const matchGab = raw.match(/GB:([A-E]+)/); 
                 if (matchGab) {
                     const gabarito = matchGab[1];
-                    document.getElementById('debug').innerText = `GAB: ${gabarito.length} Qs | Ajuste os sliders!`;
                     processar(code, gabarito);
                 }
             }
@@ -152,7 +106,7 @@
                 const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
                 const esc = 255 - ((p[0] + p[1] + p[2]) / 3);
 
-                // Feedback visual
+                // Feedback visual: cyan = lido, red = vazio
                 ctx.fillStyle = esc > config.threshold ? "red" : "cyan";
                 ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
 
@@ -163,9 +117,7 @@
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
         document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
-        
-        // Exibe os valores para você me mandar
-        document.getElementById('debug').innerText = `X:${config.offsetX.toFixed(2)} Y:${config.offsetY.toFixed(2)} | H:${config.gapH.toFixed(3)} V:${config.gapV.toFixed(3)} | C:${config.colGap.toFixed(2)}`;
+        document.getElementById('debug').innerText = `Gabarito lido (${gabarito.length} Qs)`;
     }
 </script>
 </body>
