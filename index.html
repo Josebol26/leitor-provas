@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OMR Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://docs.opencv.org/4.8.0/opencv.js" async id="opencvScript"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -407,13 +408,40 @@
             line-height: 1;
         }
         .btn-calib-abrir:hover { border-color: var(--accent); }
+
+        /* ── OVERLAY FOLHA ── */
+        #canvas-overlay {
+            position: fixed; inset: 0;
+            width: 100%; height: 100%;
+            object-fit: contain;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .folha-status {
+            position: fixed; top: 60px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 11;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            background: rgba(8,12,16,0.8);
+            padding: 5px 12px;
+            border-radius: 99px;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .folha-status.detectada { color: var(--accent2); border-color: var(--accent2); }
     </style>
 </head>
 <body>
 
 <video id="video" playsinline></video>
 <canvas id="canvas"></canvas>
+<canvas id="canvas-overlay"></canvas>
 <div class="overlay-bottom"></div>
+<div class="folha-status" id="folha-status">PROCURANDO FOLHA</div>
 
 <!-- Header -->
 <div class="header">
@@ -516,104 +544,288 @@
     const video    = document.getElementById('video');
     const canvas   = document.getElementById('canvas');
     const ctx      = canvas.getContext('2d');
+    const canvasOv = document.getElementById('canvas-overlay');
+    const ctxOv    = canvasOv.getContext('2d');
     const mira     = document.getElementById('mira');
-    const statusPill = document.getElementById('status-pill');
-    const statusTxt  = document.getElementById('status-txt');
-    const cardRes    = document.getElementById('card-resultado');
-    const resNome    = document.getElementById('res-nome');
-    const resAcertos = document.getElementById('res-acertos');
-    const resTotal   = document.getElementById('res-total');
-    const barraFill  = document.getElementById('barra-fill');
+    const statusPill  = document.getElementById('status-pill');
+    const statusTxt   = document.getElementById('status-txt');
+    const folhaStatus = document.getElementById('folha-status');
+    const cardRes     = document.getElementById('card-resultado');
+    const resNome     = document.getElementById('res-nome');
+    const resAcertos  = document.getElementById('res-acertos');
+    const resTotal    = document.getElementById('res-total');
+    const barraFill   = document.getElementById('barra-fill');
     const btnCapturar = document.getElementById('btn-capturar');
     const btnProximo  = document.getElementById('btn-proximo');
 
     let congelado = false;
     let dadosAtuais = null;
-    let imagemCongelada = null;
+    let imagemCorrigida = null; // ImageData após homografia
+    let qrNaCorrigida = null;   // posição do QR na imagem corrigida
     let historico = [];
+    let cvReady = false;
 
     const config = {
-        offsetX: -2.175,
-        offsetY: 1.560,
-        gapH: 0.611,
-        gapV: 0.335,
-        colGap: 1.680,
-        threshold: 81
+        offsetX: -2.175, offsetY: 1.560,
+        gapH: 0.611, gapV: 0.335,
+        colGap: 1.680, threshold: 81
     };
 
-    // ── SUAVIZAÇÃO DO QR (média das últimas N detecções) ──
+    // ── OPENCV PRONTO ──
+    document.getElementById('opencvScript').onload = () => {
+        if (typeof cv !== 'undefined' && cv.then) {
+            cv.then(() => { cvReady = true; });
+        } else {
+            cvReady = true;
+        }
+    };
+
+    // ── SUAVIZAÇÃO QR ──
     const SMOOTH_N = 5;
-    let qrBuffer = [];       // últimas posições detectadas
-    let framesSerQR = 0;     // frames consecutivos SEM QR (debounce)
-    const DEBOUNCE_FRAMES = 8; // só reseta depois de 8 frames sem QR
+    let qrBuffer = [];
+    let framesSerQR = 0;
+    const DEBOUNCE = 8;
 
     function smoothQR(code) {
-        // Guarda as 4 coordenadas do QR no buffer
         qrBuffer.push({
-            tl: { ...code.location.topLeftCorner },
-            tr: { ...code.location.topRightCorner },
-            bl: { ...code.location.bottomLeftCorner },
-            br: { ...code.location.bottomRightCorner },
+            tl: {...code.location.topLeftCorner},
+            tr: {...code.location.topRightCorner},
+            bl: {...code.location.bottomLeftCorner},
+            br: {...code.location.bottomRightCorner},
             data: code.data
         });
         if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
-
-        // Calcula média
         const n = qrBuffer.length;
-        const avg = (key, axis) => qrBuffer.reduce((s, q) => s + q[key][axis], 0) / n;
+        const avg = (k, a) => qrBuffer.reduce((s, q) => s + q[k][a], 0) / n;
         return {
             location: {
-                topLeftCorner:     { x: avg('tl','x'), y: avg('tl','y') },
-                topRightCorner:    { x: avg('tr','x'), y: avg('tr','y') },
-                bottomLeftCorner:  { x: avg('bl','x'), y: avg('bl','y') },
-                bottomRightCorner: { x: avg('br','x'), y: avg('br','y') },
+                topLeftCorner:     {x: avg('tl','x'), y: avg('tl','y')},
+                topRightCorner:    {x: avg('tr','x'), y: avg('tr','y')},
+                bottomLeftCorner:  {x: avg('bl','x'), y: avg('bl','y')},
+                bottomRightCorner: {x: avg('br','x'), y: avg('br','y')},
             },
-            data: qrBuffer[qrBuffer.length - 1].data
+            data: qrBuffer[qrBuffer.length-1].data
         };
     }
 
-    // ── TRANSFORMAÇÃO DE PERSPECTIVA ──
-    // Dado que o QR tem 4 cantos conhecidos no espaço da imagem,
-    // calcula onde cada bolinha cai considerando a inclinação da folha.
-    function transformarPonto(qr, normX, normY) {
-        // normX, normY: coordenadas normalizadas relativas ao QR
-        // Usamos interpolação bilinear com os 4 cantos do QR
-        const tl = qr.location.topLeftCorner;
-        const tr = qr.location.topRightCorner;
-        const bl = qr.location.bottomLeftCorner;
-        const br = qr.location.bottomRightCorner;
+    // ── DETECÇÃO DE BORDAS DA FOLHA (JS puro, sem OpenCV) ──
+    // Retorna os 4 cantos do maior quadrilátero branco encontrado, ou null
+    let folhaBuffer = [];
+    const FOLHA_SMOOTH = 4;
 
-        // normX é relativo ao tamanho do QR; precisamos mapear para [0,1] dentro da folha
-        // Usamos o tamanho do QR como unidade e aplicamos perspectiva pelos 4 cantos
-        const qrW = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-        const qrH = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+    function detectarFolha(imgData, W, H) {
+        // 1. Converte para escala de cinza e aplica threshold para isolar fundo branco
+        const data = imgData.data;
+        const gray = new Uint8Array(W * H);
+        for (let i = 0; i < W * H; i++) {
+            const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+            gray[i] = (r*77 + g*150 + b*29) >> 8;
+        }
 
-        // u, v: posição normalizada [0..1] relativa ao QR (pode ser > 1 para fora do QR)
-        const u = normX; // normX já está em unidades de qrSize
-        const v = normY;
+        // 2. Amostrar bordas em múltiplos pontos para encontrar os 4 cantos
+        // Estratégia: varre das bordas para o centro procurando pixels claros
+        const MARGEM = 0.05;
+        const PASSOS = 40;
+        const THRESH_FOLHA = 180;
 
-        // Vetores dos lados do QR (normalizados pelo tamanho do QR)
-        const dx_right = (tr.x - tl.x) / qrW;
-        const dy_right = (tr.y - tl.y) / qrW;
-        const dx_down  = (bl.x - tl.x) / qrH;
-        const dy_down  = (bl.y - tl.y) / qrH;
+        function scanLinha(x0, y0, dx, dy, steps) {
+            for (let s = 0; s < steps; s++) {
+                const x = Math.round(x0 + dx * s);
+                const y = Math.round(y0 + dy * s);
+                if (x < 0 || x >= W || y < 0 || y >= H) continue;
+                if (gray[y * W + x] > THRESH_FOLHA) return {x, y};
+            }
+            return null;
+        }
 
-        // Ponto de referência: centro do QR
-        const cx = (tl.x + br.x) / 2;
-        const cy = (tl.y + br.y) / 2;
+        // Varre de cada canto para o centro
+        const maxDist = Math.max(W, H) * 0.7;
+        const step = maxDist / PASSOS;
 
-        // Offset em pixels usando os vetores reais do QR
-        const qrSize = (qrW + qrH) / 2;
-        const px = cx + normX * qrSize * dx_right + normY * qrSize * dx_down;
-        const py = cy + normX * qrSize * dy_right + normY * qrSize * dy_down;
+        // Canto TL: varre de (0,0) em diagonal
+        const tl = scanLinha(0, 0, step/Math.sqrt(2), step/Math.sqrt(2), PASSOS);
+        // Canto TR: varre de (W,0) em diagonal
+        const tr = scanLinha(W-1, 0, -step/Math.sqrt(2), step/Math.sqrt(2), PASSOS);
+        // Canto BL: varre de (0,H) em diagonal
+        const bl = scanLinha(0, H-1, step/Math.sqrt(2), -step/Math.sqrt(2), PASSOS);
+        // Canto BR: varre de (W,H) em diagonal
+        const br = scanLinha(W-1, H-1, -step/Math.sqrt(2), -step/Math.sqrt(2), PASSOS);
 
-        return { x: px, y: py };
+        if (!tl || !tr || !bl || !br) return null;
+
+        // Verifica se o quadrilátero tem tamanho mínimo razoável (> 40% da tela)
+        const largura = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+        const altura  = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+        if (largura < W * 0.3 || altura < H * 0.3) return null;
+
+        return {tl, tr, bl, br};
+    }
+
+    function smoothFolha(cantos) {
+        folhaBuffer.push(cantos);
+        if (folhaBuffer.length > FOLHA_SMOOTH) folhaBuffer.shift();
+        const n = folhaBuffer.length;
+        const avg = (k, a) => folhaBuffer.reduce((s, f) => s + f[k][a], 0) / n;
+        return {
+            tl: {x: avg('tl','x'), y: avg('tl','y')},
+            tr: {x: avg('tr','x'), y: avg('tr','y')},
+            bl: {x: avg('bl','x'), y: avg('bl','y')},
+            br: {x: avg('br','x'), y: avg('br','y')},
+        };
+    }
+
+    // ── HOMOGRAFIA (perspectiva → retangular) ──
+    // Implementação de homografia 2D em JS puro
+    function calcHomografia(src, dstW, dstH) {
+        // src: {tl, tr, bl, br} — pontos na imagem original
+        // dst: retângulo dstW x dstH
+        const dst = {
+            tl: {x:0,      y:0},
+            tr: {x:dstW,   y:0},
+            bl: {x:0,      y:dstH},
+            br: {x:dstW,   y:dstH}
+        };
+
+        // Monta sistema Ax = b para homografia 3x3
+        const pts_src = [src.tl, src.tr, src.br, src.bl];
+        const pts_dst = [dst.tl, dst.tr, dst.br, dst.bl];
+
+        const A = [];
+        for (let i = 0; i < 4; i++) {
+            const {x: xs, y: ys} = pts_src[i];
+            const {x: xd, y: yd} = pts_dst[i];
+            A.push([-xs, -ys, -1, 0, 0, 0, xd*xs, xd*ys, xd]);
+            A.push([0, 0, 0, -xs, -ys, -1, yd*xs, yd*ys, yd]);
+        }
+
+        // Resolve via eliminação gaussiana
+        const h = gaussianElim(A);
+        if (!h) return null;
+
+        return [
+            h[0], h[1], h[2],
+            h[3], h[4], h[5],
+            h[6], h[7], 1
+        ];
+    }
+
+    function gaussianElim(A) {
+        const n = 8;
+        // Augmented matrix com b embutido
+        const M = A.map(row => [...row]);
+
+        for (let col = 0; col < n; col++) {
+            // Pivô
+            let maxRow = col;
+            let maxVal = Math.abs(M[col][col]);
+            for (let row = col+1; row < 2*n; row++) {
+                if (Math.abs(M[row][col]) > maxVal) { maxVal = Math.abs(M[row][col]); maxRow = row; }
+            }
+            [M[col], M[maxRow]] = [M[maxRow], M[col]];
+            if (Math.abs(M[col][col]) < 1e-10) return null;
+
+            for (let row = 0; row < 2*n; row++) {
+                if (row === col) continue;
+                const factor = M[row][col] / M[col][col];
+                for (let k = col; k <= n; k++) M[row][k] -= factor * M[col][k];
+            }
+        }
+        return M.slice(0, n).map((row, i) => row[n] / row[i]);
+    }
+
+    function aplicarHomografia(H, srcData, srcW, srcH, dstW, dstH) {
+        // H: src→dst. Precisamos do inverso para mapear dst→src
+        const dst = new ImageData(dstW, dstH);
+        const dstData = dst.data;
+        const srcPx = srcData.data;
+
+        // Inverte H (3x3)
+        const Hinv = invertMatrix3x3(H);
+        if (!Hinv) return null;
+
+        for (let dy = 0; dy < dstH; dy++) {
+            for (let dx = 0; dx < dstW; dx++) {
+                // Transforma ponto dst → src
+                const w  = Hinv[6]*dx + Hinv[7]*dy + Hinv[8];
+                const sx = (Hinv[0]*dx + Hinv[1]*dy + Hinv[2]) / w;
+                const sy = (Hinv[3]*dx + Hinv[4]*dy + Hinv[5]) / w;
+
+                const sx0 = Math.floor(sx), sy0 = Math.floor(sy);
+                if (sx0 < 0 || sx0 >= srcW-1 || sy0 < 0 || sy0 >= srcH-1) continue;
+
+                // Bilinear interpolation
+                const fx = sx - sx0, fy = sy - sy0;
+                const i00 = (sy0 * srcW + sx0) * 4;
+                const i10 = (sy0 * srcW + sx0+1) * 4;
+                const i01 = ((sy0+1) * srcW + sx0) * 4;
+                const i11 = ((sy0+1) * srcW + sx0+1) * 4;
+                const idst = (dy * dstW + dx) * 4;
+
+                for (let c = 0; c < 3; c++) {
+                    dstData[idst+c] = Math.round(
+                        srcPx[i00+c] * (1-fx)*(1-fy) +
+                        srcPx[i10+c] * fx*(1-fy) +
+                        srcPx[i01+c] * (1-fx)*fy +
+                        srcPx[i11+c] * fx*fy
+                    );
+                }
+                dstData[idst+3] = 255;
+            }
+        }
+        return dst;
+    }
+
+    function invertMatrix3x3(m) {
+        const [a,b,c,d,e,f,g,h,i] = m;
+        const det = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
+        if (Math.abs(det) < 1e-10) return null;
+        const inv = [
+            (e*i-f*h)/det, (c*h-b*i)/det, (b*f-c*e)/det,
+            (f*g-d*i)/det, (a*i-c*g)/det, (c*d-a*f)/det,
+            (d*h-e*g)/det, (b*g-a*h)/det, (a*e-b*d)/det
+        ];
+        return inv;
+    }
+
+    // ── DESENHA CONTORNO DA FOLHA ──
+    let folhaAtual = null;
+
+    function desenharContorno(cantos, W, H) {
+        canvasOv.width  = canvas.width;
+        canvasOv.height = canvas.height;
+        ctxOv.clearRect(0, 0, W, H);
+        if (!cantos) return;
+
+        const {tl, tr, bl, br} = cantos;
+        ctxOv.beginPath();
+        ctxOv.moveTo(tl.x, tl.y);
+        ctxOv.lineTo(tr.x, tr.y);
+        ctxOv.lineTo(br.x, br.y);
+        ctxOv.lineTo(bl.x, bl.y);
+        ctxOv.closePath();
+        ctxOv.strokeStyle = 'rgba(0,255,157,0.9)';
+        ctxOv.lineWidth = 3;
+        ctxOv.stroke();
+        ctxOv.fillStyle = 'rgba(0,255,157,0.06)';
+        ctxOv.fill();
+
+        // Cantos
+        [tl, tr, bl, br].forEach(p => {
+            ctxOv.beginPath();
+            ctxOv.arc(p.x, p.y, 10, 0, Math.PI*2);
+            ctxOv.fillStyle = 'rgba(0,255,157,0.9)';
+            ctxOv.fill();
+        });
     }
 
     // ── STATUS ──
     function setStatus(estado, texto) {
         statusPill.className = 'status-pill ' + estado;
         statusTxt.innerText = texto;
+    }
+    function setFolhaStatus(detectada, texto) {
+        folhaStatus.className = 'folha-status' + (detectada ? ' detectada' : '');
+        folhaStatus.innerText = texto;
     }
 
     // ── TOAST ──
@@ -628,7 +840,7 @@
     async function iniciarCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+                video: { facingMode: "environment", width: {ideal:1280}, height: {ideal:720} }
             });
             video.srcObject = stream;
             video.play();
@@ -638,7 +850,6 @@
             alert("Erro de câmera: " + err);
         }
     }
-
     iniciarCamera();
 
     // ── LOOP PRINCIPAL ──
@@ -648,34 +859,43 @@
         requestAnimationFrame(tick);
         if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-        // Desenha câmera todo frame (fluido)
         canvas.height = video.videoHeight;
         canvas.width  = video.videoWidth;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Processa QR só a ~12fps
-        if (ts - ultimoTick < 80) return;
+        if (ts - ultimoTick < 100) return;
         ultimoTick = ts;
 
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imgData.data, imgData.width, imgData.height);
+        const W = canvas.width, H = canvas.height;
+        const imgData = ctx.getImageData(0, 0, W, H);
 
+        // 1. Detecta folha
+        const cantos = detectarFolha(imgData, W, H);
+        if (cantos) {
+            folhaAtual = smoothFolha(cantos);
+            desenharContorno(folhaAtual, W, H);
+            setFolhaStatus(true, '📄 FOLHA DETECTADA');
+        } else {
+            folhaAtual = null;
+            desenharContorno(null, W, H);
+            setFolhaStatus(false, 'PROCURANDO FOLHA');
+        }
+
+        // 2. Detecta QR no frame original
+        const code = jsQR(imgData.data, W, H);
         if (code) {
             framesSerQR = 0;
-            const raw = code.data;
-            const match = raw.match(/AL:([^|]*)\|GB:([A-E]+)/);
+            const match = code.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
             if (match) {
                 const qrSmooth = smoothQR(code);
-                processar(qrSmooth, match[2], match[1], false, imgData);
-                dadosAtuais = { code: qrSmooth, gabarito: match[2], nome: match[1] };
-                setStatus('ready', 'QR DETECTADO');
+                setStatus('ready', 'QR + FOLHA OK');
                 mira.classList.add('oculta');
                 btnCapturar.disabled = false;
+                dadosAtuais = { code: qrSmooth, gabarito: match[2], nome: match[1] };
             }
         } else {
             framesSerQR++;
-            // Só reseta o estado após DEBOUNCE_FRAMES frames seguidos sem QR
-            if (framesSerQR >= DEBOUNCE_FRAMES && dadosAtuais) {
+            if (framesSerQR >= DEBOUNCE && dadosAtuais) {
                 dadosAtuais = null;
                 qrBuffer = [];
                 btnCapturar.disabled = true;
@@ -692,32 +912,90 @@
         congelado = true;
         btnCapturar.style.display = 'none';
         btnProximo.style.display = 'block';
+        setStatus('frozen', 'PROCESSANDO...');
+
+        const W = canvas.width, H = canvas.height;
+        const imgData = ctx.getImageData(0, 0, W, H);
+
+        // Se folha detectada: aplica homografia para retificar perspectiva
+        if (folhaAtual) {
+            const A4_W = 794, A4_H = 1123; // proporção A4 em pixels
+            const H_mat = calcHomografia(folhaAtual, A4_W, A4_H);
+
+            if (H_mat) {
+                const retificada = aplicarHomografia(H_mat, imgData, W, H, A4_W, A4_H);
+                if (retificada) {
+                    // Renderiza imagem retificada no canvas
+                    canvas.width  = A4_W;
+                    canvas.height = A4_H;
+                    ctx.putImageData(retificada, 0, 0);
+
+                    // Detecta QR na imagem retificada para posição atualizada
+                    const qrRet = jsQR(retificada.data, A4_W, A4_H);
+                    if (qrRet) {
+                        const match = qrRet.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+                        if (match) {
+                            imagemCorrigida = retificada;
+                            processar(qrRet, match[2], match[1], true, retificada);
+                            setStatus('frozen', 'CONGELADO');
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: usa frame original se homografia falhou
+        const imgCongelada = ctx.getImageData(0, 0, W, H);
+        imagemCorrigida = imgCongelada;
+        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imgCongelada);
         setStatus('frozen', 'CONGELADO');
-        imagemCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
     }
 
     // ── PRÓXIMO ──
     function proximo() {
         congelado = false;
         dadosAtuais = null;
-        imagemCongelada = null;
+        imagemCorrigida = null;
         qrBuffer = [];
+        folhaBuffer = [];
         framesSerQR = 0;
+        folhaAtual = null;
         btnCapturar.style.display = 'block';
         btnCapturar.disabled = true;
         btnProximo.style.display = 'none';
         cardRes.classList.remove('visivel');
         mira.classList.remove('oculta');
         setStatus('scanning', 'AGUARDANDO QR CODE');
+        setFolhaStatus(false, 'PROCURANDO FOLHA');
         requestAnimationFrame(tick);
     }
 
-    // ── PROCESSAR (com correção de perspectiva) ──
+    // ── PROCESSAR ──
     function processar(qr, gabarito, nome, finalizar, pixelData) {
         const data = pixelData.data;
         const imgW = pixelData.width;
         const imgH = pixelData.height;
+
+        const qrW = Math.hypot(
+            qr.location.topRightCorner.x - qr.location.topLeftCorner.x,
+            qr.location.topRightCorner.y - qr.location.topLeftCorner.y
+        );
+        const qrH2 = Math.hypot(
+            qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x,
+            qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y
+        );
+        const qrSize = (qrW + qrH2) / 2;
+
+        // Vetores de perspectiva a partir dos lados reais do QR
+        const tl = qr.location.topLeftCorner;
+        const tr = qr.location.topRightCorner;
+        const bl = qr.location.bottomLeftCorner;
+        const cx = (tl.x + qr.location.bottomRightCorner.x) / 2;
+        const cy = (tl.y + qr.location.bottomRightCorner.y) / 2;
+
+        const ux = (tr.x - tl.x) / qrW, uy = (tr.y - tl.y) / qrW; // vetor direita
+        const vx = (bl.x - tl.x) / qrH2, vy = (bl.y - tl.y) / qrH2; // vetor baixo
 
         let acertos = 0;
 
@@ -727,23 +1005,22 @@
             const baseX = config.offsetX + (col * config.colGap);
             const baseY = config.offsetY + (lin * config.gapV);
 
-            let marcada = -1;
-            let maxEsc  = 0;
+            let marcada = -1, maxEsc = 0;
 
             for (let alt = 0; alt < 5; alt++) {
                 const normX = baseX + (alt * config.gapH);
                 const normY = baseY;
 
-                // Usa transformação de perspectiva em vez de centro+offset simples
-                const { x, y } = transformarPonto(qr, normX, normY);
+                const x = cx + normX * qrSize * ux + normY * qrSize * vx;
+                const y = cy + normX * qrSize * uy + normY * qrSize * vy;
 
-                if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
+                if (x < 0 || x > imgW || y < 0 || y > imgH) continue;
 
                 let totalEsc = 0;
                 for (let dx = -1; dx <= 1; dx++) {
                     for (let dy = -1; dy <= 1; dy++) {
-                        const px  = Math.min(Math.max(Math.floor(x + dx), 0), imgW - 1);
-                        const py  = Math.min(Math.max(Math.floor(y + dy), 0), imgH - 1);
+                        const px  = Math.min(Math.max(Math.floor(x+dx), 0), imgW-1);
+                        const py  = Math.min(Math.max(Math.floor(y+dy), 0), imgH-1);
                         const idx = (py * imgW + px) * 4;
                         totalEsc += 255 - ((data[idx] + data[idx+1] + data[idx+2]) / 3);
                     }
@@ -753,37 +1030,33 @@
                 const correta = String.fromCharCode(65 + alt) === gabarito[i];
 
                 ctx.beginPath();
-                ctx.arc(x, y, 8, 0, Math.PI * 2);
-                if (marcadaEsta) {
-                    ctx.fillStyle = correta ? 'rgba(0,255,157,0.85)' : 'rgba(255,61,90,0.85)';
-                } else {
-                    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-                }
+                ctx.arc(x, y, 8, 0, Math.PI*2);
+                ctx.fillStyle = marcadaEsta
+                    ? (correta ? 'rgba(0,255,157,0.85)' : 'rgba(255,61,90,0.85)')
+                    : 'rgba(255,255,255,0.15)';
                 ctx.fill();
 
                 ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,0.5)';
                 ctx.font = 'bold 7px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(String.fromCharCode(65 + alt), x, y);
+                ctx.fillText(String.fromCharCode(65+alt), x, y);
 
                 if (marcadaEsta && esc > maxEsc) { maxEsc = esc; marcada = alt; }
             }
-
-            if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
+            if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
         }
 
         if (finalizar) {
             const total = gabarito.length;
-            const pct   = Math.round((acertos / total) * 100);
+            const pct = Math.round((acertos/total)*100);
             resNome.innerText    = nome;
             resAcertos.innerText = acertos;
             resTotal.innerText   = `/ ${total}`;
             barraFill.style.width = pct + '%';
             cardRes.classList.add('visivel');
-
             const jaExiste = historico.findIndex(h => h.nome === nome);
-            const entrada = { nome, acertos, total, pct };
+            const entrada = {nome, acertos, total, pct};
             if (jaExiste >= 0) historico[jaExiste] = entrada;
             else historico.push(entrada);
             atualizarBadge();
@@ -794,15 +1067,13 @@
     function syncCalib(key, input, dec, spanId) {
         config[key] = parseFloat(input.value);
         document.getElementById(spanId).innerText = config[key].toFixed(dec);
-        if (congelado && dadosAtuais && imagemCongelada) {
-            ctx.putImageData(imagemCongelada, 0, 0);
-            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
+        if (congelado && dadosAtuais && imagemCorrigida) {
+            ctx.putImageData(imagemCorrigida, 0, 0);
+            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCorrigida);
         }
     }
-
-    function abrirCalib() { document.getElementById('drawer-calib').classList.add('aberto'); }
+    function abrirCalib()  { document.getElementById('drawer-calib').classList.add('aberto'); }
     function fecharCalib() { document.getElementById('drawer-calib').classList.remove('aberto'); }
-
     function copiarConfig() {
         const txt = `offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
         navigator.clipboard.writeText(txt).catch(()=>{});
@@ -814,7 +1085,6 @@
         document.getElementById('hist-badge').innerText = historico.length;
         document.getElementById('hist-count-label').innerText = historico.length;
     }
-
     function abrirDrawer() {
         const lista = document.getElementById('drawer-lista');
         const resumo = document.getElementById('drawer-resumo');
@@ -822,38 +1092,32 @@
             lista.innerHTML = '<div class="drawer-vazio">Nenhuma prova corrigida ainda.</div>';
             resumo.innerText = '';
         } else {
-            const media = Math.round(historico.reduce((s, h) => s + h.pct, 0) / historico.length);
+            const media = Math.round(historico.reduce((s,h) => s+h.pct, 0) / historico.length);
             resumo.innerText = `média ${media}%`;
-            lista.innerHTML = historico
-                .slice().sort((a, b) => b.acertos - a.acertos)
-                .map(h => `
-                    <div class="historico-item">
-                        <div>
-                            <div class="hist-nome">${h.nome}</div>
-                            <div class="hist-pct">${h.pct}% de acerto</div>
-                        </div>
-                        <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
-                    </div>`).join('');
+            lista.innerHTML = historico.slice().sort((a,b) => b.acertos-a.acertos).map(h => `
+                <div class="historico-item">
+                    <div><div class="hist-nome">${h.nome}</div><div class="hist-pct">${h.pct}% de acerto</div></div>
+                    <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
+                </div>`).join('');
         }
         document.getElementById('drawer').classList.add('aberto');
     }
-
-    function fecharDrawer() {
-        document.getElementById('drawer').classList.remove('aberto');
-    }
+    function fecharDrawer() { document.getElementById('drawer').classList.remove('aberto'); }
 
     // ── EXPORTAR CSV ──
     function exportarCSV() {
-        if (historico.length === 0) { showToast('Nenhum resultado ainda'); return; }
+        if (!historico.length) { showToast('Nenhum resultado ainda'); return; }
         const linhas = ['Nome,Acertos,Total,Porcentagem'];
         historico.forEach(h => linhas.push(`"${h.nome}",${h.acertos},${h.total},${h.pct}%`));
-        const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
+        const blob = new Blob([linhas.join('\n')], {type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
         a.href = url; a.download = 'resultados_omr.csv'; a.click();
         URL.revokeObjectURL(url);
         showToast('CSV exportado!');
     }
+
+    let framesSerQR = 0;
 </script>
 </body>
 </html>
