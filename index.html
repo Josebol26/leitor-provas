@@ -541,6 +541,75 @@
         threshold: 81
     };
 
+    // ── SUAVIZAÇÃO DO QR (média das últimas N detecções) ──
+    const SMOOTH_N = 5;
+    let qrBuffer = [];       // últimas posições detectadas
+    let framesSerQR = 0;     // frames consecutivos SEM QR (debounce)
+    const DEBOUNCE_FRAMES = 8; // só reseta depois de 8 frames sem QR
+
+    function smoothQR(code) {
+        // Guarda as 4 coordenadas do QR no buffer
+        qrBuffer.push({
+            tl: { ...code.location.topLeftCorner },
+            tr: { ...code.location.topRightCorner },
+            bl: { ...code.location.bottomLeftCorner },
+            br: { ...code.location.bottomRightCorner },
+            data: code.data
+        });
+        if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
+
+        // Calcula média
+        const n = qrBuffer.length;
+        const avg = (key, axis) => qrBuffer.reduce((s, q) => s + q[key][axis], 0) / n;
+        return {
+            location: {
+                topLeftCorner:     { x: avg('tl','x'), y: avg('tl','y') },
+                topRightCorner:    { x: avg('tr','x'), y: avg('tr','y') },
+                bottomLeftCorner:  { x: avg('bl','x'), y: avg('bl','y') },
+                bottomRightCorner: { x: avg('br','x'), y: avg('br','y') },
+            },
+            data: qrBuffer[qrBuffer.length - 1].data
+        };
+    }
+
+    // ── TRANSFORMAÇÃO DE PERSPECTIVA ──
+    // Dado que o QR tem 4 cantos conhecidos no espaço da imagem,
+    // calcula onde cada bolinha cai considerando a inclinação da folha.
+    function transformarPonto(qr, normX, normY) {
+        // normX, normY: coordenadas normalizadas relativas ao QR
+        // Usamos interpolação bilinear com os 4 cantos do QR
+        const tl = qr.location.topLeftCorner;
+        const tr = qr.location.topRightCorner;
+        const bl = qr.location.bottomLeftCorner;
+        const br = qr.location.bottomRightCorner;
+
+        // normX é relativo ao tamanho do QR; precisamos mapear para [0,1] dentro da folha
+        // Usamos o tamanho do QR como unidade e aplicamos perspectiva pelos 4 cantos
+        const qrW = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+        const qrH = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+
+        // u, v: posição normalizada [0..1] relativa ao QR (pode ser > 1 para fora do QR)
+        const u = normX; // normX já está em unidades de qrSize
+        const v = normY;
+
+        // Vetores dos lados do QR (normalizados pelo tamanho do QR)
+        const dx_right = (tr.x - tl.x) / qrW;
+        const dy_right = (tr.y - tl.y) / qrW;
+        const dx_down  = (bl.x - tl.x) / qrH;
+        const dy_down  = (bl.y - tl.y) / qrH;
+
+        // Ponto de referência: centro do QR
+        const cx = (tl.x + br.x) / 2;
+        const cy = (tl.y + br.y) / 2;
+
+        // Offset em pixels usando os vetores reais do QR
+        const qrSize = (qrW + qrH) / 2;
+        const px = cx + normX * qrSize * dx_right + normY * qrSize * dx_down;
+        const py = cy + normX * qrSize * dy_right + normY * qrSize * dy_down;
+
+        return { x: px, y: py };
+    }
+
     // ── STATUS ──
     function setStatus(estado, texto) {
         statusPill.className = 'status-pill ' + estado;
@@ -572,20 +641,19 @@
 
     iniciarCamera();
 
-    // ── LOOP PRINCIPAL (limitado a ~15fps para leitura QR, canvas roda a 60fps) ──
+    // ── LOOP PRINCIPAL ──
     let ultimoTick = 0;
     function tick(ts) {
         if (congelado) return;
         requestAnimationFrame(tick);
-
         if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-        // Desenha câmera em todo frame (fluido)
+        // Desenha câmera todo frame (fluido)
         canvas.height = video.videoHeight;
         canvas.width  = video.videoWidth;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Processa QR só a cada ~80ms (~12fps) para não travar
+        // Processa QR só a ~12fps
         if (ts - ultimoTick < 80) return;
         ultimoTick = ts;
 
@@ -593,18 +661,23 @@
         const code = jsQR(imgData.data, imgData.width, imgData.height);
 
         if (code) {
+            framesSerQR = 0;
             const raw = code.data;
             const match = raw.match(/AL:([^|]*)\|GB:([A-E]+)/);
             if (match) {
-                processar(code, match[2], match[1], false, imgData);
-                dadosAtuais = { code, gabarito: match[2], nome: match[1] };
+                const qrSmooth = smoothQR(code);
+                processar(qrSmooth, match[2], match[1], false, imgData);
+                dadosAtuais = { code: qrSmooth, gabarito: match[2], nome: match[1] };
                 setStatus('ready', 'QR DETECTADO');
                 mira.classList.add('oculta');
                 btnCapturar.disabled = false;
             }
         } else {
-            if (dadosAtuais) {
+            framesSerQR++;
+            // Só reseta o estado após DEBOUNCE_FRAMES frames seguidos sem QR
+            if (framesSerQR >= DEBOUNCE_FRAMES && dadosAtuais) {
                 dadosAtuais = null;
+                qrBuffer = [];
                 btnCapturar.disabled = true;
                 setStatus('scanning', 'AGUARDANDO QR CODE');
                 mira.classList.remove('oculta');
@@ -629,6 +702,8 @@
         congelado = false;
         dadosAtuais = null;
         imagemCongelada = null;
+        qrBuffer = [];
+        framesSerQR = 0;
         btnCapturar.style.display = 'block';
         btnCapturar.disabled = true;
         btnProximo.style.display = 'none';
@@ -638,20 +713,8 @@
         requestAnimationFrame(tick);
     }
 
-    // ── PROCESSAR ──
+    // ── PROCESSAR (com correção de perspectiva) ──
     function processar(qr, gabarito, nome, finalizar, pixelData) {
-        const qrWidth = Math.hypot(
-            qr.location.topRightCorner.x - qr.location.topLeftCorner.x,
-            qr.location.topRightCorner.y - qr.location.topLeftCorner.y
-        );
-        const qrHeight = Math.hypot(
-            qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x,
-            qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y
-        );
-        const qrSize   = (qrWidth + qrHeight) / 2;
-        const qrCenterX = (qr.location.topLeftCorner.x + qr.location.bottomRightCorner.x) / 2;
-        const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomRightCorner.y) / 2;
-
         const data = pixelData.data;
         const imgW = pixelData.width;
         const imgH = pixelData.height;
@@ -661,15 +724,18 @@
         for (let i = 0; i < gabarito.length; i++) {
             const col = Math.floor(i / 30);
             const lin = i % 30;
-            const posX = config.offsetX + (col * config.colGap);
-            const posY = config.offsetY + (lin * config.gapV);
+            const baseX = config.offsetX + (col * config.colGap);
+            const baseY = config.offsetY + (lin * config.gapV);
 
             let marcada = -1;
             let maxEsc  = 0;
 
             for (let alt = 0; alt < 5; alt++) {
-                const x = qrCenterX + qrSize * (posX + (alt * config.gapH));
-                const y = qrCenterY + qrSize * posY;
+                const normX = baseX + (alt * config.gapH);
+                const normY = baseY;
+
+                // Usa transformação de perspectiva em vez de centro+offset simples
+                const { x, y } = transformarPonto(qr, normX, normY);
 
                 if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
 
@@ -686,7 +752,6 @@
                 const marcadaEsta = esc > config.threshold;
                 const correta = String.fromCharCode(65 + alt) === gabarito[i];
 
-                // Desenha bolinha
                 ctx.beginPath();
                 ctx.arc(x, y, 8, 0, Math.PI * 2);
                 if (marcadaEsta) {
@@ -696,9 +761,8 @@
                 }
                 ctx.fill();
 
-                // Letra
                 ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,0.5)';
-                ctx.font = 'bold 7px Space Mono, monospace';
+                ctx.font = 'bold 7px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(String.fromCharCode(65 + alt), x, y);
@@ -712,21 +776,37 @@
         if (finalizar) {
             const total = gabarito.length;
             const pct   = Math.round((acertos / total) * 100);
-
             resNome.innerText    = nome;
             resAcertos.innerText = acertos;
             resTotal.innerText   = `/ ${total}`;
             barraFill.style.width = pct + '%';
             cardRes.classList.add('visivel');
 
-            // Salva no histórico (evita duplicata do mesmo aluno na sessão)
             const jaExiste = historico.findIndex(h => h.nome === nome);
             const entrada = { nome, acertos, total, pct };
             if (jaExiste >= 0) historico[jaExiste] = entrada;
             else historico.push(entrada);
-
             atualizarBadge();
         }
+    }
+
+    // ── CALIBRAÇÃO ──
+    function syncCalib(key, input, dec, spanId) {
+        config[key] = parseFloat(input.value);
+        document.getElementById(spanId).innerText = config[key].toFixed(dec);
+        if (congelado && dadosAtuais && imagemCongelada) {
+            ctx.putImageData(imagemCongelada, 0, 0);
+            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
+        }
+    }
+
+    function abrirCalib() { document.getElementById('drawer-calib').classList.add('aberto'); }
+    function fecharCalib() { document.getElementById('drawer-calib').classList.remove('aberto'); }
+
+    function copiarConfig() {
+        const txt = `offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
+        navigator.clipboard.writeText(txt).catch(()=>{});
+        showToast('Valores copiados!');
     }
 
     // ── HISTÓRICO ──
@@ -738,7 +818,6 @@
     function abrirDrawer() {
         const lista = document.getElementById('drawer-lista');
         const resumo = document.getElementById('drawer-resumo');
-
         if (historico.length === 0) {
             lista.innerHTML = '<div class="drawer-vazio">Nenhuma prova corrigida ainda.</div>';
             resumo.innerText = '';
@@ -756,7 +835,6 @@
                         <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
                     </div>`).join('');
         }
-
         document.getElementById('drawer').classList.add('aberto');
     }
 
@@ -764,31 +842,7 @@
         document.getElementById('drawer').classList.remove('aberto');
     }
 
-    // ── CALIBRAÇÃO ──
-    function syncCalib(key, input, dec, spanId) {
-        config[key] = parseFloat(input.value);
-        document.getElementById(spanId).innerText = config[key].toFixed(dec);
-        // Redesenha ao vivo se congelado
-        if (congelado && dadosAtuais && imagemCongelada) {
-            ctx.putImageData(imagemCongelada, 0, 0);
-            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
-        }
-    }
-
-    function abrirCalib() {
-        document.getElementById('drawer-calib').classList.add('aberto');
-    }
-    function fecharCalib() {
-        document.getElementById('drawer-calib').classList.remove('aberto');
-    }
-
-    function copiarConfig() {
-        const txt = `offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
-        navigator.clipboard.writeText(txt).catch(()=>{});
-        showToast('Valores copiados!');
-    }
-
-
+    // ── EXPORTAR CSV ──
     function exportarCSV() {
         if (historico.length === 0) { showToast('Nenhum resultado ainda'); return; }
         const linhas = ['Nome,Acertos,Total,Porcentagem'];
