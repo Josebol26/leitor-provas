@@ -3,44 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner OMR Ajuste Fino</title>
+    <title>Scanner OMR Calibração</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
+        * { box-sizing: border-box; }
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #000; }
         #video { width: 100vw; height: 100vh; object-fit: contain; }
         #canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; }
-        
-        .painel { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); 
-                  background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; width: 85%; 
-                  border: 2px solid #28a745; color: white; text-align: center; }
-        
-        #res-nota { font-size: 32px; color: #28a745; font-weight: bold; margin: 5px 0; }
-        #res-nome { font-size: 18px; color: #fff; font-weight: bold; margin-bottom: 5px; }
-        #status { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
-        
-        .control-group { margin-bottom: 10px; font-size: 12px; }
-        input[type=range] { width: 100%; }
-        
-        button { padding: 12px; border: none; border-radius: 8px; color: white; width: 100%; font-weight: bold; font-size: 16px; background: #007bff; }
-        #btn-confirmar { background: #28a745; display: none; margin-top: 10px; }
+
+        .painel {
+            position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.92); padding: 12px 15px; border-radius: 12px 12px 0 0;
+            width: 100%; max-width: 480px;
+            border-top: 2px solid #28a745; color: white; text-align: center;
+            max-height: 55vh; overflow-y: auto;
+        }
+
+        #res-nota { font-size: 28px; color: #28a745; font-weight: bold; margin: 3px 0; }
+        #res-nome { font-size: 15px; color: #fff; font-weight: bold; margin-bottom: 3px; }
+        #status { font-weight: bold; font-size: 13px; margin-bottom: 6px; color: #ffc107; }
+
+        .secao-titulo {
+            font-size: 11px; text-transform: uppercase; color: #aaa;
+            border-bottom: 1px solid #444; margin: 8px 0 6px; padding-bottom: 3px;
+            text-align: left;
+        }
+
+        .slider-row {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 5px; font-size: 12px;
+        }
+        .slider-row label { width: 90px; text-align: right; flex-shrink: 0; color: #ccc; }
+        .slider-row input[type=range] { flex: 1; }
+        .slider-row .val {
+            width: 46px; text-align: left; font-weight: bold;
+            color: #4fc3f7; flex-shrink: 0; font-size: 12px;
+        }
+
+        .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+        button {
+            flex: 1; padding: 10px; border: none; border-radius: 8px;
+            color: white; font-weight: bold; font-size: 14px; background: #007bff;
+        }
+        #btn-confirmar { background: #28a745; display: none; }
+        #btn-copiar { background: #6c757d; font-size: 12px; flex: 0.6; }
     </style>
 </head>
 <body>
     <video id="video" playsinline></video>
     <canvas id="canvas"></canvas>
-    
+
     <div class="painel">
         <div id="status">MIRAR NO QR CODE</div>
         <div id="res-nome"></div>
         <div id="res-nota">-- / --</div>
-        
-        <div class="control-group">
-            <label>Limiar de Escuridão (Threshold): <span id="vthresh">160</span></label>
-            <input type="range" id="threshold" min="50" max="250" step="1" value="160">
+
+        <div class="secao-titulo">🎯 Posição inicial</div>
+
+        <div class="slider-row">
+            <label>Offset X</label>
+            <input type="range" id="s_offsetX" min="-4" max="0" step="0.005" value="-1.980">
+            <span class="val" id="v_offsetX">-1.980</span>
         </div>
-        
-        <button id="btn-capturar" onclick="capturar()">CAPTURAR</button>
-        <button id="btn-confirmar" onclick="proximo()">PRÓXIMO</button>
+        <div class="slider-row">
+            <label>Offset Y</label>
+            <input type="range" id="s_offsetY" min="-1" max="3" step="0.005" value="0.960">
+            <span class="val" id="v_offsetY">0.960</span>
+        </div>
+
+        <div class="secao-titulo">↔️ Espaçamento</div>
+
+        <div class="slider-row">
+            <label>Gap Horiz.</label>
+            <input type="range" id="s_gapH" min="0.1" max="1.0" step="0.001" value="0.492">
+            <span class="val" id="v_gapH">0.492</span>
+        </div>
+        <div class="slider-row">
+            <label>Gap Vert.</label>
+            <input type="range" id="s_gapV" min="0.1" max="0.8" step="0.001" value="0.287">
+            <span class="val" id="v_gapV">0.287</span>
+        </div>
+        <div class="slider-row">
+            <label>Gap Coluna</label>
+            <input type="range" id="s_colGap" min="0.5" max="3.0" step="0.005" value="1.300">
+            <span class="val" id="v_colGap">1.300</span>
+        </div>
+
+        <div class="secao-titulo">🔍 Detecção</div>
+
+        <div class="slider-row">
+            <label>Threshold</label>
+            <input type="range" id="s_thresh" min="50" max="250" step="1" value="160">
+            <span class="val" id="v_thresh">160</span>
+        </div>
+
+        <div class="btn-row">
+            <button id="btn-capturar" onclick="capturar()">CAPTURAR</button>
+            <button id="btn-confirmar" onclick="proximo()">PRÓXIMO</button>
+            <button id="btn-copiar" onclick="copiarConfig()">📋 Config</button>
+        </div>
     </div>
 
 <script>
@@ -52,37 +113,67 @@
     const resNotaDiv = document.getElementById('res-nota');
     const btnCapturar = document.getElementById('btn-capturar');
     const btnConfirmar = document.getElementById('btn-confirmar');
-    const thresholdSlider = document.getElementById('threshold');
-    const vthreshSpan = document.getElementById('vthresh');
-    
+
     let congelado = false;
     let dadosAtuais = null;
-    let imagemCongelada = null; // FIX 3: armazena ImageData no momento da captura
-    let thresholdValue = 160;
+    let imagemCongelada = null;
 
-    thresholdSlider.addEventListener('input', () => {
-        thresholdValue = parseInt(thresholdSlider.value);
-        vthreshSpan.innerText = thresholdValue;
-
-        // FIX 5: redesenha sobre a imagem congelada ao mover slider
-        if (congelado && dadosAtuais && imagemCongelada) {
-            ctx.putImageData(imagemCongelada, 0, 0);
-            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
-        }
-    });
-
+    // Config reativa
     const config = {
-        offsetX: -1.980, 
+        offsetX: -1.980,
         offsetY: 0.960,
         gapH: 0.492,
         gapV: 0.287,
-        colGap: 1.300
+        colGap: 1.300,
+        threshold: 160
     };
+
+    // Mapa slider -> config
+    const sliders = [
+        { id: 's_offsetX', val: 'v_offsetX', key: 'offsetX', dec: 3 },
+        { id: 's_offsetY', val: 'v_offsetY', key: 'offsetY', dec: 3 },
+        { id: 's_gapH',    val: 'v_gapH',    key: 'gapH',    dec: 3 },
+        { id: 's_gapV',    val: 'v_gapV',    key: 'gapV',    dec: 3 },
+        { id: 's_colGap',  val: 'v_colGap',  key: 'colGap',  dec: 3 },
+        { id: 's_thresh',  val: 'v_thresh',  key: 'threshold', dec: 0 },
+    ];
+
+    sliders.forEach(({ id, val, key, dec }) => {
+        const input = document.getElementById(id);
+        const span  = document.getElementById(val);
+        input.addEventListener('input', () => {
+            config[key] = parseFloat(input.value);
+            span.innerText = config[key].toFixed(dec);
+
+            // Redesenha ao vivo se congelado
+            if (congelado && dadosAtuais && imagemCongelada) {
+                ctx.putImageData(imagemCongelada, 0, 0);
+                processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
+            }
+        });
+    });
+
+    function copiarConfig() {
+        const txt =
+`const config = {
+    offsetX: ${config.offsetX.toFixed(3)},
+    offsetY: ${config.offsetY.toFixed(3)},
+    gapH: ${config.gapH.toFixed(3)},
+    gapV: ${config.gapV.toFixed(3)},
+    colGap: ${config.colGap.toFixed(3)}
+};
+// threshold: ${config.threshold}`;
+        navigator.clipboard.writeText(txt).then(() => {
+            alert("✅ Configuração copiada!\n\n" + txt);
+        }).catch(() => {
+            alert("Configuração atual:\n\n" + txt);
+        });
+    }
 
     async function iniciarCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" } 
+                video: { facingMode: "environment" }
             });
             video.srcObject = stream;
             video.play();
@@ -99,25 +190,24 @@
 
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
             canvas.height = video.videoHeight;
-            canvas.width = video.videoWidth;
+            canvas.width  = video.videoWidth;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
+
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imgData.data, imgData.width, imgData.height);
 
             if (code) {
                 const raw = code.data;
-                // FIX 4: regex corrigida para não engolir o separador
                 const matchData = raw.match(/AL:([^|]*)\|GB:([A-E]+)/);
-                
                 if (matchData) {
-                    // FIX 2: passa imgData já capturado, evitando getImageData no loop
                     processar(code, matchData[2], matchData[1], false, imgData);
                     dadosAtuais = { code, gabarito: matchData[2], nome: matchData[1] };
-                    statusDiv.innerText = "PRONTO";
+                    statusDiv.innerText = "✅ PRONTO — CAPTURAR";
+                    statusDiv.style.color = "#28a745";
                 }
             } else {
                 statusDiv.innerText = "MIRAR NO QR CODE";
+                statusDiv.style.color = "#ffc107";
             }
         }
         requestAnimationFrame(tick);
@@ -128,9 +218,8 @@
         congelado = true;
         btnCapturar.style.display = "none";
         btnConfirmar.style.display = "block";
-        statusDiv.innerText = "CAPTURA CONGELADA";
-
-        // FIX 3: salva o ImageData atual antes de desenhar os pontos
+        statusDiv.innerText = "📸 CONGELADO — ajuste os sliders";
+        statusDiv.style.color = "#4fc3f7";
         imagemCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
         processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
     }
@@ -146,23 +235,23 @@
         requestAnimationFrame(tick);
     }
 
-    // FIX 2: recebe pixelData como parâmetro — sem getImageData dentro do loop
     function processar(qr, gabarito, nome, finalizar, pixelData) {
-        const qrWidth = Math.sqrt(
-            Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) +
-            Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2)
+        const qrWidth = Math.hypot(
+            qr.location.topRightCorner.x - qr.location.topLeftCorner.x,
+            qr.location.topRightCorner.y - qr.location.topLeftCorner.y
         );
-        const qrHeight = Math.sqrt(
-            Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) +
-            Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2)
+        const qrHeight = Math.hypot(
+            qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x,
+            qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y
         );
         const qrSize = (qrWidth + qrHeight) / 2;
-        
+
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.bottomRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomRightCorner.y) / 2;
 
-        const data = pixelData.data;
-        const imgWidth = pixelData.width;
+        const data     = pixelData.data;
+        const imgW     = pixelData.width;
+        const imgH     = pixelData.height;
 
         let acertos = 0;
 
@@ -174,7 +263,7 @@
             const posY = config.offsetY + (lin * config.gapV);
 
             let marcada = -1;
-            let maxEsc = 0;
+            let maxEsc  = 0;
 
             for (let alt = 0; alt < 5; alt++) {
                 const x = qrCenterX + qrSize * (posX + (alt * config.gapH));
@@ -182,34 +271,46 @@
 
                 if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
 
-                // FIX 2: leitura direta do buffer, sem chamar getImageData por pixel
                 let totalEsc = 0;
-                let pixels = 0;
+                let pixels   = 0;
                 for (let dx = -1; dx <= 1; dx++) {
                     for (let dy = -1; dy <= 1; dy++) {
-                        const px = Math.min(Math.max(Math.floor(x + dx), 0), imgWidth - 1);
-                        const py = Math.min(Math.max(Math.floor(y + dy), 0), pixelData.height - 1);
-                        const idx = (py * imgWidth + px) * 4;
+                        const px  = Math.min(Math.max(Math.floor(x + dx), 0), imgW - 1);
+                        const py  = Math.min(Math.max(Math.floor(y + dy), 0), imgH - 1);
+                        const idx = (py * imgW + px) * 4;
                         totalEsc += 255 - ((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
                         pixels++;
                     }
                 }
                 const esc = totalEsc / pixels;
+                const marcadaEsta = esc > config.threshold;
 
-                ctx.fillStyle = esc > thresholdValue ? "red" : "cyan";
+                // Cor: verde = marcada correta, vermelho = marcada errada, ciano = vazia
+                if (marcadaEsta) {
+                    ctx.fillStyle = String.fromCharCode(65 + alt) === gabarito[i] ? "#00e676" : "#f44336";
+                } else {
+                    ctx.fillStyle = "rgba(0,200,255,0.5)";
+                }
                 ctx.beginPath();
-                // FIX 1: ângulo final corrigido para Math.PI * 2 (círculo completo)
                 ctx.arc(x, y, 7, 0, Math.PI * 2);
                 ctx.fill();
 
-                if (esc > thresholdValue && esc > maxEsc) {
+                // Número da alternativa
+                ctx.fillStyle = "#000";
+                ctx.font = "bold 8px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(String.fromCharCode(65 + alt), x, y);
+
+                if (marcadaEsta && esc > maxEsc) {
                     maxEsc = esc;
                     marcada = alt;
                 }
             }
+
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
         }
-        
+
         if (finalizar) {
             resNomeDiv.innerText = nome;
             resNotaDiv.innerText = `${acertos} / ${gabarito.length}`;
