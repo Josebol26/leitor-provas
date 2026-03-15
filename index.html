@@ -37,7 +37,7 @@
             width: 100%; height: 100%;
             object-fit: contain;
             z-index: 0;
-            display: none;
+            /* NÃO esconde o video — canvas precisa que ele esteja visível para drawImage funcionar em alguns browsers */
         }
         #canvas {
             position: fixed; inset: 0;
@@ -414,7 +414,7 @@
             position: fixed; inset: 0;
             width: 100%; height: 100%;
             object-fit: contain;
-            z-index: 2;
+            z-index: 3;
             pointer-events: none;
         }
         .folha-status {
@@ -843,7 +843,23 @@
                 video: { facingMode: "environment", width: {ideal:1280}, height: {ideal:720} }
             });
             video.srcObject = stream;
-            video.play();
+            await video.play();
+
+            // Espera o vídeo ter dimensões reais
+            await new Promise(res => {
+                if (video.videoWidth > 0) return res();
+                video.addEventListener('loadedmetadata', res, {once: true});
+            });
+
+            // Inicializa canvas com tamanho real do vídeo
+            canvas.width  = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvasOv.width  = video.videoWidth;
+            canvasOv.height = video.videoHeight;
+
+            // Esconde o video depois de confirmar que está rodando
+            video.style.display = 'none';
+
             requestAnimationFrame(tick);
         } catch (err) {
             setStatus('', 'ERRO DE CÂMERA');
@@ -859,8 +875,15 @@
         requestAnimationFrame(tick);
         if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-        canvas.height = video.videoHeight;
-        canvas.width  = video.videoWidth;
+        // Sincroniza tamanho do canvas com o vídeo apenas se mudou
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width    = video.videoWidth;
+            canvas.height   = video.videoHeight;
+            canvasOv.width  = video.videoWidth;
+            canvasOv.height = video.videoHeight;
+        }
+
+        // Desenha frame da câmera
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         if (ts - ultimoTick < 100) return;
