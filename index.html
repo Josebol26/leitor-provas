@@ -55,18 +55,22 @@
     const thresholdSlider = document.getElementById('threshold');
     const vthreshSpan = document.getElementById('vthresh');
     
-    let escaneando = true;
     let congelado = false;
     let dadosAtuais = null;
+    let imagemCongelada = null; // FIX 3: armazena ImageData no momento da captura
     let thresholdValue = 160;
 
-    // Atualiza o limiar em tempo real
     thresholdSlider.addEventListener('input', () => {
         thresholdValue = parseInt(thresholdSlider.value);
         vthreshSpan.innerText = thresholdValue;
+
+        // FIX 5: redesenha sobre a imagem congelada ao mover slider
+        if (congelado && dadosAtuais && imagemCongelada) {
+            ctx.putImageData(imagemCongelada, 0, 0);
+            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
+        }
     });
 
-    // --- SEUS VALORES FIXOS ---
     const config = {
         offsetX: -1.980, 
         offsetY: 0.960,
@@ -103,11 +107,13 @@
 
             if (code) {
                 const raw = code.data;
-                const matchData = raw.match(/AL:(.*)\|GB:([A-E]+)/);
+                // FIX 4: regex corrigida para não engolir o separador
+                const matchData = raw.match(/AL:([^|]*)\|GB:([A-E]+)/);
                 
                 if (matchData) {
-                    processar(code, matchData[2], matchData[1], false);
-                    dadosAtuais = {code, gabarito: matchData[2], nome: matchData[1]};
+                    // FIX 2: passa imgData já capturado, evitando getImageData no loop
+                    processar(code, matchData[2], matchData[1], false, imgData);
+                    dadosAtuais = { code, gabarito: matchData[2], nome: matchData[1] };
                     statusDiv.innerText = "PRONTO";
                 }
             } else {
@@ -123,12 +129,16 @@
         btnCapturar.style.display = "none";
         btnConfirmar.style.display = "block";
         statusDiv.innerText = "CAPTURA CONGELADA";
-        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true);
+
+        // FIX 3: salva o ImageData atual antes de desenhar os pontos
+        imagemCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
     }
 
     function proximo() {
         congelado = false;
         dadosAtuais = null;
+        imagemCongelada = null;
         btnCapturar.style.display = "block";
         btnConfirmar.style.display = "none";
         resNomeDiv.innerText = "";
@@ -136,13 +146,23 @@
         requestAnimationFrame(tick);
     }
 
-    function processar(qr, gabarito, nome, finalizar) {
-        const qrWidth = Math.sqrt(Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2));
-        const qrHeight = Math.sqrt(Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) + Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2));
+    // FIX 2: recebe pixelData como parâmetro — sem getImageData dentro do loop
+    function processar(qr, gabarito, nome, finalizar, pixelData) {
+        const qrWidth = Math.sqrt(
+            Math.pow(qr.location.topRightCorner.x - qr.location.topLeftCorner.x, 2) +
+            Math.pow(qr.location.topRightCorner.y - qr.location.topLeftCorner.y, 2)
+        );
+        const qrHeight = Math.sqrt(
+            Math.pow(qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x, 2) +
+            Math.pow(qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y, 2)
+        );
         const qrSize = (qrWidth + qrHeight) / 2;
         
         const qrCenterX = (qr.location.topLeftCorner.x + qr.location.bottomRightCorner.x) / 2;
         const qrCenterY = (qr.location.topLeftCorner.y + qr.location.bottomRightCorner.y) / 2;
+
+        const data = pixelData.data;
+        const imgWidth = pixelData.width;
 
         let acertos = 0;
 
@@ -162,24 +182,29 @@
 
                 if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) continue;
 
-                // Amostragem 3x3
+                // FIX 2: leitura direta do buffer, sem chamar getImageData por pixel
                 let totalEsc = 0;
                 let pixels = 0;
-                for(let dx = -1; dx <= 1; dx++) {
-                    for(let dy = -1; dy <= 1; dy++) {
-                        const p = ctx.getImageData(Math.floor(x + dx), Math.floor(y + dy), 1, 1).data;
-                        totalEsc += 255 - ((p[0] + p[1] + p[2]) / 3);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const px = Math.min(Math.max(Math.floor(x + dx), 0), imgWidth - 1);
+                        const py = Math.min(Math.max(Math.floor(y + dy), 0), pixelData.height - 1);
+                        const idx = (py * imgWidth + px) * 4;
+                        totalEsc += 255 - ((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
                         pixels++;
                     }
                 }
                 const esc = totalEsc / pixels;
 
-                // --- FEEDBACK VISUAL USANDO O THRESHOLD DO SLIDER ---
                 ctx.fillStyle = esc > thresholdValue ? "red" : "cyan";
-                ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fill();
+                ctx.beginPath();
+                // FIX 1: ângulo final corrigido para Math.PI * 2 (círculo completo)
+                ctx.arc(x, y, 7, 0, Math.PI * 2);
+                ctx.fill();
 
                 if (esc > thresholdValue && esc > maxEsc) {
-                    maxEsc = esc; marcada = alt;
+                    maxEsc = esc;
+                    marcada = alt;
                 }
             }
             if (marcada !== -1 && String.fromCharCode(65 + marcada) === gabarito[i]) acertos++;
