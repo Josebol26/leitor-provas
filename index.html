@@ -34,21 +34,22 @@
         #video {
             position: fixed; inset: 0;
             width: 100%; height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             z-index: 0;
+            display: none;
         }
         #canvas {
             position: fixed; inset: 0;
             width: 100%; height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             z-index: 1;
         }
 
         /* ── OVERLAY GRADIENTE ── */
         .overlay-bottom {
             position: fixed; bottom: 0; left: 0; right: 0;
-            height: 55%;
-            background: linear-gradient(to top, rgba(8,12,16,0.97) 40%, transparent);
+            height: 40%;
+            background: linear-gradient(to top, rgba(8,12,16,0.90) 25%, transparent);
             z-index: 2;
             pointer-events: none;
         }
@@ -383,6 +384,29 @@
             display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .btn-exportar:hover { border-color: var(--accent2); color: var(--accent2); }
+
+        /* ── DRAWER CALIBRAÇÃO ── */
+        .calib-row {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 8px; font-size: 12px;
+        }
+        .calib-row label { width: 80px; text-align: right; flex-shrink: 0; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
+        .calib-row input[type=range] { flex: 1; accent-color: var(--accent); }
+        .calib-row .cval { width: 52px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent); flex-shrink: 0; }
+        .calib-secao { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.1em; border-bottom: 1px solid var(--border); margin: 12px 0 8px; padding-bottom: 4px; }
+        .btn-calib-abrir {
+            position: fixed; bottom: 100px; right: 16px;
+            z-index: 11;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+            line-height: 1;
+        }
+        .btn-calib-abrir:hover { border-color: var(--accent); }
     </style>
 </head>
 <body>
@@ -444,6 +468,9 @@
     </div>
 </div>
 
+<!-- Botão calibração -->
+<button class="btn-calib-abrir" onclick="abrirCalib()" title="Calibração">⚙️</button>
+
 <!-- Drawer Histórico -->
 <div class="drawer" id="drawer">
     <div class="drawer-bg" onclick="fecharDrawer()"></div>
@@ -459,6 +486,29 @@
         <button class="btn-exportar" onclick="exportarCSV()">
             ⬇️ Exportar CSV
         </button>
+    </div>
+</div>
+
+<!-- Drawer Calibração -->
+<div class="drawer" id="drawer-calib">
+    <div class="drawer-bg" onclick="fecharCalib()"></div>
+    <div class="drawer-panel">
+        <div class="drawer-handle"></div>
+        <div class="drawer-titulo">Calibração <span id="calib-status-txt"></span></div>
+
+        <div class="calib-secao">Posição inicial</div>
+        <div class="calib-row"><label>Offset X</label><input type="range" id="c_offsetX" min="-4" max="0" step="0.005" value="-2.175" oninput="syncCalib('offsetX',this,3,'c_v_offsetX')"><span class="cval" id="c_v_offsetX">-2.175</span></div>
+        <div class="calib-row"><label>Offset Y</label><input type="range" id="c_offsetY" min="-1" max="3" step="0.005" value="1.560" oninput="syncCalib('offsetY',this,3,'c_v_offsetY')"><span class="cval" id="c_v_offsetY">1.560</span></div>
+
+        <div class="calib-secao">Espaçamento</div>
+        <div class="calib-row"><label>Gap H</label><input type="range" id="c_gapH" min="0.1" max="1.0" step="0.001" value="0.611" oninput="syncCalib('gapH',this,3,'c_v_gapH')"><span class="cval" id="c_v_gapH">0.611</span></div>
+        <div class="calib-row"><label>Gap V</label><input type="range" id="c_gapV" min="0.1" max="0.8" step="0.001" value="0.335" oninput="syncCalib('gapV',this,3,'c_v_gapV')"><span class="cval" id="c_v_gapV">0.335</span></div>
+        <div class="calib-row"><label>Col Gap</label><input type="range" id="c_colGap" min="0.5" max="3.0" step="0.005" value="1.680" oninput="syncCalib('colGap',this,3,'c_v_colGap')"><span class="cval" id="c_v_colGap">1.680</span></div>
+
+        <div class="calib-secao">Detecção</div>
+        <div class="calib-row"><label>Threshold</label><input type="range" id="c_thresh" min="50" max="250" step="1" value="81" oninput="syncCalib('threshold',this,0,'c_v_thresh')"><span class="cval" id="c_v_thresh">81</span></div>
+
+        <button class="btn-exportar" onclick="copiarConfig()">📋 Copiar valores</button>
     </div>
 </div>
 
@@ -509,7 +559,7 @@
     async function iniciarCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
+                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
             });
             video.srcObject = stream;
             video.play();
@@ -522,39 +572,45 @@
 
     iniciarCamera();
 
-    // ── LOOP PRINCIPAL ──
-    function tick() {
+    // ── LOOP PRINCIPAL (limitado a ~15fps para leitura QR, canvas roda a 60fps) ──
+    let ultimoTick = 0;
+    function tick(ts) {
         if (congelado) return;
+        requestAnimationFrame(tick);
 
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.height = video.videoHeight;
-            canvas.width  = video.videoWidth;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imgData.data, imgData.width, imgData.height);
+        // Desenha câmera em todo frame (fluido)
+        canvas.height = video.videoHeight;
+        canvas.width  = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            if (code) {
-                const raw = code.data;
-                const match = raw.match(/AL:([^|]*)\|GB:([A-E]+)/);
-                if (match) {
-                    processar(code, match[2], match[1], false, imgData);
-                    dadosAtuais = { code, gabarito: match[2], nome: match[1] };
-                    setStatus('ready', 'QR DETECTADO');
-                    mira.classList.add('oculta');
-                    btnCapturar.disabled = false;
-                }
-            } else {
-                if (dadosAtuais) {
-                    dadosAtuais = null;
-                    btnCapturar.disabled = true;
-                    setStatus('scanning', 'AGUARDANDO QR CODE');
-                    mira.classList.remove('oculta');
-                    cardRes.classList.remove('visivel');
-                }
+        // Processa QR só a cada ~80ms (~12fps) para não travar
+        if (ts - ultimoTick < 80) return;
+        ultimoTick = ts;
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height);
+
+        if (code) {
+            const raw = code.data;
+            const match = raw.match(/AL:([^|]*)\|GB:([A-E]+)/);
+            if (match) {
+                processar(code, match[2], match[1], false, imgData);
+                dadosAtuais = { code, gabarito: match[2], nome: match[1] };
+                setStatus('ready', 'QR DETECTADO');
+                mira.classList.add('oculta');
+                btnCapturar.disabled = false;
+            }
+        } else {
+            if (dadosAtuais) {
+                dadosAtuais = null;
+                btnCapturar.disabled = true;
+                setStatus('scanning', 'AGUARDANDO QR CODE');
+                mira.classList.remove('oculta');
+                cardRes.classList.remove('visivel');
             }
         }
-        requestAnimationFrame(tick);
     }
 
     // ── CAPTURAR ──
@@ -708,7 +764,31 @@
         document.getElementById('drawer').classList.remove('aberto');
     }
 
-    // ── EXPORTAR CSV ──
+    // ── CALIBRAÇÃO ──
+    function syncCalib(key, input, dec, spanId) {
+        config[key] = parseFloat(input.value);
+        document.getElementById(spanId).innerText = config[key].toFixed(dec);
+        // Redesenha ao vivo se congelado
+        if (congelado && dadosAtuais && imagemCongelada) {
+            ctx.putImageData(imagemCongelada, 0, 0);
+            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
+        }
+    }
+
+    function abrirCalib() {
+        document.getElementById('drawer-calib').classList.add('aberto');
+    }
+    function fecharCalib() {
+        document.getElementById('drawer-calib').classList.remove('aberto');
+    }
+
+    function copiarConfig() {
+        const txt = `offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
+        navigator.clipboard.writeText(txt).catch(()=>{});
+        showToast('Valores copiados!');
+    }
+
+
     function exportarCSV() {
         if (historico.length === 0) { showToast('Nenhum resultado ainda'); return; }
         const linhas = ['Nome,Acertos,Total,Porcentagem'];
