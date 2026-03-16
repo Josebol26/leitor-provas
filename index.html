@@ -8,190 +8,131 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #080c10;
-            --surface: #0e1419;
-            --border: #1e2a35;
-            --accent: #00e5ff;
-            --accent2: #00ff9d;
-            --danger: #ff3d5a;
-            --text: #e8f0f5;
-            --muted: #4a6070;
-            --card: #111922;
+            --bg: #080c10; --surface: #0e1419; --border: #1e2a35;
+            --accent: #00e5ff; --accent2: #00ff9d; --danger: #ff3d5a;
+            --text: #e8f0f5; --muted: #4a6070; --card: #111922;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Syne', sans-serif; background: #000; color: var(--text); overflow: hidden; height: 100vh; width: 100vw; }
 
-        /* Vídeo ocupa tela toda como base */
-        #video {
-            position: fixed; inset: 0;
-            width: 100%; height: 100%;
-            object-fit: cover;
-            z-index: 0;
-        }
-        /* Canvas sobreposto, mesmo tamanho CSS que o video */
-        #canvas {
-            position: fixed; inset: 0;
-            width: 100%; height: 100%;
-            object-fit: cover;
-            z-index: 1;
-            filter: brightness(1.25) contrast(1.1);
-        }
+        #video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        #canvas { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; filter: brightness(1.2) contrast(1.05); }
 
         .overlay-bottom {
             position: fixed; bottom: 0; left: 0; right: 0; height: 45%;
             background: linear-gradient(to top, rgba(8,12,16,0.93) 30%, transparent);
             z-index: 2; pointer-events: none;
         }
-
         .header {
             position: fixed; top: 0; left: 0; right: 0; z-index: 10;
             display: flex; align-items: center; justify-content: space-between;
-            padding: 18px 20px 12px;
+            padding: 16px 20px 12px;
             background: linear-gradient(to bottom, rgba(8,12,16,0.95), transparent);
         }
-        .logo { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; }
+        .logo { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 0.15em; color: var(--accent); }
         .logo span { color: var(--muted); }
-
-        /* Mira central */
-        .mira {
-            position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%, -65%);
-            width: 200px; height: 200px;
-            z-index: 3; pointer-events: none; transition: opacity 0.3s;
+        .header-btns { display: flex; gap: 8px; }
+        .icon-btn {
+            background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 7px 10px; font-size: 16px; cursor: pointer; color: white; line-height: 1; transition: all 0.2s;
         }
-        .mira.oculta { opacity: 0; }
-        .mira-corner { position: absolute; width: 28px; height: 28px; border-color: var(--accent); border-style: solid; opacity: 0.9; }
-        .mira-corner.tl { top:0; left:0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
-        .mira-corner.tr { top:0; right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
-        .mira-corner.bl { bottom:0; left:0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
-        .mira-corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
-        .mira-scan { position: absolute; top:0; left:0; right:0; height:2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan 2s ease-in-out infinite; }
-        @keyframes scan { 0%{top:0;opacity:1} 90%{top:100%;opacity:1} 100%{top:100%;opacity:0} }
+        .icon-btn:hover { border-color: var(--accent); }
+        .icon-btn.active { border-color: #ffd600; background: rgba(255,214,0,0.15); }
 
-        /* Painel inferior */
-        .painel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; padding: 0 16px 24px; }
-
+        /* Status principal */
         .status-pill {
             display: inline-flex; align-items: center; gap: 8px;
             background: var(--card); border: 1px solid var(--border);
             border-radius: 100px; padding: 7px 14px;
             font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.08em;
-            margin-bottom: 16px; transition: all 0.3s;
+            margin-bottom: 14px; transition: all 0.3s;
         }
         .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: all 0.3s; }
-        .status-pill.scanning .status-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.2s ease-in-out infinite; }
-        .status-pill.ready .status-dot { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
-        .status-pill.frozen .status-dot { background: #ffd600; box-shadow: 0 0 8px #ffd600; }
-        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+        .status-pill.scanning .status-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.2s infinite; }
+        .status-pill.pronto   .status-dot { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+        .status-pill.frozen   .status-dot { background: #ffd600; box-shadow: 0 0 8px #ffd600; }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
 
+        /* Card resultado */
         .card-resultado {
             background: var(--card); border: 1px solid var(--border);
-            border-radius: 20px; padding: 20px; margin-bottom: 14px;
-            display: none; animation: slideUp 0.35s cubic-bezier(0.16,1,0.3,1);
+            border-radius: 20px; padding: 18px; margin-bottom: 12px;
+            display: none; animation: slideUp .35s cubic-bezier(.16,1,.3,1);
         }
         .card-resultado.visivel { display: block; }
         @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
-        .nome-aluno { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-        .nota-wrap { display: flex; align-items: baseline; gap: 6px; }
-        .nota-num { font-family: 'Space Mono', monospace; font-size: 52px; font-weight: 700; line-height: 1; color: var(--accent2); letter-spacing: -2px; }
-        .nota-den { font-family: 'Space Mono', monospace; font-size: 22px; color: var(--muted); }
-        .barra-progresso { margin-top: 14px; height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
-        .barra-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.6s cubic-bezier(0.16,1,0.3,1); }
+        .nome-aluno { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px; }
+        .nota-wrap { display:flex; align-items:baseline; gap:6px; }
+        .nota-num { font-family:'Space Mono',monospace; font-size:50px; font-weight:700; line-height:1; color:var(--accent2); letter-spacing:-2px; }
+        .nota-den { font-family:'Space Mono',monospace; font-size:20px; color:var(--muted); }
+        .barra-progresso { margin-top:12px; height:4px; background:var(--border); border-radius:99px; overflow:hidden; }
+        .barra-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .6s cubic-bezier(.16,1,.3,1); }
 
-        .btn-row { display: flex; gap: 10px; }
-        .btn { flex:1; height:52px; border:none; border-radius:14px; font-family:'Syne',sans-serif; font-weight:700; font-size:14px; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px; }
-        .btn:active { transform: scale(0.97); }
-        .btn-capturar { background: var(--accent); color: var(--bg); }
-        .btn-capturar:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
-        .btn-proximo { background: var(--accent2); color: var(--bg); display: none; }
+        .painel { position:fixed; bottom:0; left:0; right:0; z-index:10; padding:0 16px 24px; }
+        .btn-row { display:flex; gap:10px; }
+        .btn { flex:1; height:52px; border:none; border-radius:14px; font-family:'Syne',sans-serif; font-weight:700; font-size:14px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .btn:active { transform:scale(.97); }
+        .btn-capturar { background:var(--accent); color:var(--bg); }
+        .btn-capturar:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
+        .btn-proximo { background:var(--accent2); color:var(--bg); display:none; }
 
-        /* Botão histórico */
+        /* Botões fixos */
         .historico-btn {
-            position: fixed; top: 16px; right: 20px; z-index: 11;
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: 10px; padding: 8px 12px;
-            font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted);
-            cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+            position:fixed; top:16px; right:20px; z-index:11;
+            background:var(--card); border:1px solid var(--border);
+            border-radius:10px; padding:8px 12px;
+            font-family:'Space Mono',monospace; font-size:11px; color:var(--muted);
+            cursor:pointer; display:flex; align-items:center; gap:6px; transition:all .2s;
         }
-        .historico-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .historico-count { background: var(--accent); color: var(--bg); border-radius: 4px; padding: 1px 6px; font-weight: 700; font-size: 10px; }
+        .historico-btn:hover { border-color:var(--accent); color:var(--accent); }
+        .historico-count { background:var(--accent); color:var(--bg); border-radius:4px; padding:1px 6px; font-weight:700; font-size:10px; }
+        .btn-calib-abrir { position:fixed; bottom:105px; right:16px; z-index:11; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:8px 10px; font-size:18px; cursor:pointer; transition:all .2s; line-height:1; }
+        .btn-calib-abrir:hover { border-color:var(--accent); }
 
         /* Toast */
-        .toast {
-            position: fixed; top: 70px; left: 50%;
-            transform: translateX(-50%) translateY(-10px);
-            background: var(--accent2); color: var(--bg);
-            padding: 10px 20px; border-radius: 100px;
-            font-weight: 700; font-size: 13px; z-index: 20;
-            opacity: 0; transition: all 0.3s; pointer-events: none; white-space: nowrap;
-        }
-        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast { position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-10px); background:var(--accent2); color:var(--bg); padding:10px 20px; border-radius:100px; font-weight:700; font-size:13px; z-index:20; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-        /* Drawer */
-        .drawer { position: fixed; inset: 0; z-index: 30; display: none; }
-        .drawer.aberto { display: block; }
-        .drawer-bg { position: absolute; inset: 0; background: rgba(8,12,16,0.8); backdrop-filter: blur(4px); }
-        .drawer-panel {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: var(--surface); border-top: 1px solid var(--border);
-            border-radius: 24px 24px 0 0; padding: 20px 20px 40px;
-            max-height: 70vh; overflow-y: auto;
-            animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1);
-        }
-        .drawer-handle { width: 40px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 20px; }
-        .drawer-titulo { font-size: 18px; font-weight: 800; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-        .drawer-titulo span { color: var(--muted); font-size: 13px; font-weight: 400; }
-        .historico-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
-        .historico-item:last-child { border-bottom: none; }
-        .hist-nome { font-size: 14px; font-weight: 600; }
-        .hist-nota { font-family: 'Space Mono', monospace; font-size: 16px; color: var(--accent2); }
-        .hist-pct { font-size: 11px; color: var(--muted); margin-top: 2px; }
-        .drawer-vazio { text-align: center; padding: 40px 0; color: var(--muted); font-size: 14px; }
-        .btn-exportar {
-            width: 100%; margin-top: 16px; height: 46px;
-            background: transparent; border: 1px solid var(--border); border-radius: 12px;
-            color: var(--text); font-family: 'Syne', sans-serif; font-weight: 600; font-size: 13px;
-            cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
-        .btn-exportar:hover { border-color: var(--accent2); color: var(--accent2); }
+        /* Drawers */
+        .drawer { position:fixed; inset:0; z-index:30; display:none; }
+        .drawer.aberto { display:block; }
+        .drawer-bg { position:absolute; inset:0; background:rgba(8,12,16,.8); backdrop-filter:blur(4px); }
+        .drawer-panel { position:absolute; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); border-radius:24px 24px 0 0; padding:20px 20px 40px; max-height:75vh; overflow-y:auto; animation:slideUp .3s cubic-bezier(.16,1,.3,1); }
+        .drawer-handle { width:40px; height:4px; background:var(--border); border-radius:99px; margin:0 auto 20px; }
+        .drawer-titulo { font-size:18px; font-weight:800; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+        .drawer-titulo span { color:var(--muted); font-size:13px; font-weight:400; }
+        .historico-item { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border); }
+        .historico-item:last-child { border-bottom:none; }
+        .hist-nome { font-size:14px; font-weight:600; }
+        .hist-nota { font-family:'Space Mono',monospace; font-size:16px; color:var(--accent2); }
+        .hist-pct { font-size:11px; color:var(--muted); margin-top:2px; }
+        .drawer-vazio { text-align:center; padding:40px 0; color:var(--muted); font-size:14px; }
+        .btn-exportar { width:100%; margin-top:16px; height:46px; background:transparent; border:1px solid var(--border); border-radius:12px; color:var(--text); font-family:'Syne',sans-serif; font-weight:600; font-size:13px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .btn-exportar:hover { border-color:var(--accent2); color:var(--accent2); }
 
         /* Calibração */
-        .calib-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-        .calib-row label { width: 80px; text-align: right; flex-shrink: 0; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
-        .calib-row input[type=range] { flex: 1; accent-color: var(--accent); }
-        .calib-row .cval { width: 52px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent); flex-shrink: 0; }
-        .calib-secao { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.1em; border-bottom: 1px solid var(--border); margin: 12px 0 8px; padding-bottom: 4px; }
-        .btn-calib-abrir {
-            position: fixed; bottom: 100px; right: 16px; z-index: 11;
-            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-            padding: 8px 10px; font-size: 18px; cursor: pointer; transition: all 0.2s; line-height: 1;
-        }
-        .btn-calib-abrir:hover { border-color: var(--accent); }
+        .calib-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        .calib-row label { width:75px; text-align:right; flex-shrink:0; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
+        .calib-row input[type=range] { flex:1; accent-color:var(--accent); }
+        .calib-row .cval { width:52px; font-family:'Space Mono',monospace; font-size:11px; color:var(--accent); flex-shrink:0; }
+        .calib-secao { font-size:10px; text-transform:uppercase; color:var(--muted); letter-spacing:.1em; border-bottom:1px solid var(--border); margin:12px 0 8px; padding-bottom:4px; }
     </style>
 </head>
 <body>
 
-<!-- Vídeo visível como base, canvas renderiza por cima -->
 <video id="video" playsinline autoplay muted></video>
 <canvas id="canvas"></canvas>
 <div class="overlay-bottom"></div>
 
 <div class="header">
     <div class="logo">OMR<span>/</span>SCAN</div>
-    <button id="btn-flash" onclick="toggleFlash()" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:16px;cursor:pointer;color:white;line-height:1;">💡</button>
-</div>
-
-<button class="historico-btn" onclick="abrirDrawer()">
-    📋 <span id="hist-count-label">0</span>
-    <span class="historico-count" id="hist-badge">0</span>
-</button>
-
-<div class="mira" id="mira">
-    <div class="mira-corner tl"></div>
-    <div class="mira-corner tr"></div>
-    <div class="mira-corner bl"></div>
-    <div class="mira-corner br"></div>
-    <div class="mira-scan"></div>
+    <div class="header-btns">
+        <button class="icon-btn" id="btn-flash" onclick="toggleFlash()">💡</button>
+        <button class="historico-btn" onclick="abrirDrawer()">
+            📋 <span id="hist-count-label">0</span>
+            <span class="historico-count" id="hist-badge">0</span>
+        </button>
+    </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -199,7 +140,7 @@
 <div class="painel">
     <div class="status-pill scanning" id="status-pill">
         <div class="status-dot"></div>
-        <span id="status-txt">AGUARDANDO QR CODE</span>
+        <span id="status-txt">APONTE PARA A FOLHA</span>
     </div>
     <div class="card-resultado" id="card-resultado">
         <div class="nome-aluno" id="res-nome">—</div>
@@ -207,9 +148,7 @@
             <div class="nota-num" id="res-acertos">—</div>
             <div class="nota-den" id="res-total">/ —</div>
         </div>
-        <div class="barra-progresso">
-            <div class="barra-fill" id="barra-fill" style="width:0%"></div>
-        </div>
+        <div class="barra-progresso"><div class="barra-fill" id="barra-fill" style="width:0%"></div></div>
     </div>
     <div class="btn-row">
         <button class="btn btn-capturar" id="btn-capturar" onclick="capturar()" disabled>
@@ -230,8 +169,8 @@
     <div class="drawer-bg" onclick="fecharDrawer()"></div>
     <div class="drawer-panel">
         <div class="drawer-handle"></div>
-        <div class="drawer-titulo">Resultados da Sessão <span id="drawer-resumo"></span></div>
-        <div id="drawer-lista"><div class="drawer-vazio">Nenhuma prova corrigida ainda.</div></div>
+        <div class="drawer-titulo">Resultados <span id="drawer-resumo"></span></div>
+        <div id="drawer-lista"><div class="drawer-vazio">Nenhuma prova ainda.</div></div>
         <button class="btn-exportar" onclick="exportarCSV()">⬇️ Exportar CSV</button>
     </div>
 </div>
@@ -242,7 +181,7 @@
     <div class="drawer-panel">
         <div class="drawer-handle"></div>
         <div class="drawer-titulo">Calibração</div>
-        <div class="calib-secao">Posição inicial</div>
+        <div class="calib-secao">Posição</div>
         <div class="calib-row"><label>Offset X</label><input type="range" id="c_offsetX" min="-4" max="0" step="0.005" value="-2.175" oninput="syncCalib('offsetX',this,3,'c_v_offsetX')"><span class="cval" id="c_v_offsetX">-2.175</span></div>
         <div class="calib-row"><label>Offset Y</label><input type="range" id="c_offsetY" min="-1" max="3" step="0.005" value="1.560" oninput="syncCalib('offsetY',this,3,'c_v_offsetY')"><span class="cval" id="c_v_offsetY">1.560</span></div>
         <div class="calib-secao">Espaçamento</div>
@@ -250,682 +189,556 @@
         <div class="calib-row"><label>Gap V</label><input type="range" id="c_gapV" min="0.1" max="0.8" step="0.001" value="0.335" oninput="syncCalib('gapV',this,3,'c_v_gapV')"><span class="cval" id="c_v_gapV">0.335</span></div>
         <div class="calib-row"><label>Col Gap</label><input type="range" id="c_colGap" min="0.5" max="3.0" step="0.005" value="1.680" oninput="syncCalib('colGap',this,3,'c_v_colGap')"><span class="cval" id="c_v_colGap">1.680</span></div>
         <div class="calib-secao">Detecção</div>
-        <div class="calib-row"><label>Threshold</label><input type="range" id="c_thresh" min="50" max="250" step="1" value="81" oninput="syncCalib('threshold',this,0,'c_v_thresh')"><span class="cval" id="c_v_thresh">81</span></div>
+        <div class="calib-row"><label>Threshold</label><input type="range" id="c_thresh" min="30" max="250" step="1" value="81" oninput="syncCalib('threshold',this,0,'c_v_thresh')"><span class="cval" id="c_v_thresh">81</span></div>
         <button class="btn-exportar" onclick="copiarConfig()">📋 Copiar valores</button>
     </div>
 </div>
 
 <script>
-    const video       = document.getElementById('video');
-    const canvas      = document.getElementById('canvas');
-    const ctx         = canvas.getContext('2d');
-    const mira        = document.getElementById('mira');
-    const statusPill  = document.getElementById('status-pill');
-    const statusTxt   = document.getElementById('status-txt');
-    const cardRes     = document.getElementById('card-resultado');
-    const resNome     = document.getElementById('res-nome');
-    const resAcertos  = document.getElementById('res-acertos');
-    const resTotal    = document.getElementById('res-total');
-    const barraFill   = document.getElementById('barra-fill');
-    const btnCapturar = document.getElementById('btn-capturar');
-    const btnProximo  = document.getElementById('btn-proximo');
+// ═══════════════════════════════════════════
+// ELEMENTOS
+// ═══════════════════════════════════════════
+const video       = document.getElementById('video');
+const canvas      = document.getElementById('canvas');
+const ctx         = canvas.getContext('2d', { willReadFrequently: true });
+const statusPill  = document.getElementById('status-pill');
+const statusTxt   = document.getElementById('status-txt');
+const cardRes     = document.getElementById('card-resultado');
+const resNome     = document.getElementById('res-nome');
+const resAcertos  = document.getElementById('res-acertos');
+const resTotal    = document.getElementById('res-total');
+const barraFill   = document.getElementById('barra-fill');
+const btnCapturar = document.getElementById('btn-capturar');
+const btnProximo  = document.getElementById('btn-proximo');
 
-    let congelado = false;
-    let dadosAtuais = null;
-    let imagemCongelada = null;
-    let historico = [];
-    let torchLigada = false;
-    let videoTrack = null;
+// ═══════════════════════════════════════════
+// ESTADO
+// ═══════════════════════════════════════════
+let congelado      = false;
+let dadosAtuais    = null;
+let imgCongelada   = null;   // ImageData do frame capturado (imagem retificada)
+let qrCongelado    = null;   // QR na imagem retificada
+let historico      = [];
+let torchLigada    = false;
+let videoTrack     = null;
 
-    // ── Estabilização do QR ──
-    const SMOOTH_N = 6;
-    let qrBuffer = [];
-    let framesSerQR = 0;
-    const DEBOUNCE = 10;
+// Suavização QR
+const SMOOTH_N = 6;
+let qrBuffer   = [];
 
-    // Estabilidade: conta frames em que o QR ficou parado
-    let framesEstaveis = 0;
-    const FRAMES_PARA_ESTAVEL = 8; // ~0.8s parado = auto-pronto
-    let qrAnterior = null;
-    const LIMIAR_MOVIMENTO = 4; // pixels de tolerância
+// Estabilidade da folha
+let folhaBuffer     = [];
+const FOLHA_N       = 5;
+let framesComFolha  = 0;
+let framesSemFolha  = 0;
+const DEBOUNCE_OFF  = 10;
+const FRAMES_ESTAVEL = 6;   // frames seguidos com folha boa para liberar botão
 
-    const config = {
-        offsetX: -2.175, offsetY: 1.560,
-        gapH: 0.611, gapV: 0.335,
-        colGap: 1.680, threshold: 81
+const config = {
+    offsetX: -2.175, offsetY: 1.560,
+    gapH: 0.611,     gapV: 0.335,
+    colGap: 1.680,   threshold: 81
+};
+
+// ═══════════════════════════════════════════
+// HOMOGRAFIA — encontra os 4 cantos da folha
+// ═══════════════════════════════════════════
+
+/**
+ * Detecta o maior quadrilátero branco na imagem.
+ * Retorna {tl, tr, br, bl} ou null.
+ */
+function detectarCantosFolha(data, W, H) {
+    // 1. Constrói mapa de "branco" em resolução reduzida (a cada STEP pixels)
+    const STEP = 4;
+    const w = Math.floor(W / STEP);
+    const h = Math.floor(H / STEP);
+    const bright = new Uint8Array(w * h);
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const px = x * STEP, py = y * STEP;
+            const i  = (py * W + px) * 4;
+            const v  = (data[i] + data[i+1] + data[i+2]) / 3;
+            bright[y * w + x] = v > 200 ? 1 : 0;
+        }
+    }
+
+    // 2. Para cada canto, varre diagonal até encontrar pixel claro
+    function scanDiag(x0, y0, dx, dy) {
+        const steps = Math.max(w, h);
+        for (let s = 0; s < steps; s++) {
+            const x = Math.round(x0 + dx * s);
+            const y = Math.round(y0 + dy * s);
+            if (x < 0 || x >= w || y < 0 || y >= h) break;
+            if (bright[y * w + x]) return { x: x * STEP, y: y * STEP };
+        }
+        return null;
+    }
+
+    const D = 0.7071; // 1/sqrt(2)
+    const tl = scanDiag(0,   0,    D,  D);
+    const tr = scanDiag(w-1, 0,   -D,  D);
+    const br = scanDiag(w-1, h-1, -D, -D);
+    const bl = scanDiag(0,   h-1,  D, -D);
+
+    if (!tl || !tr || !br || !bl) return null;
+
+    // 3. Valida tamanho mínimo (~35% da tela)
+    const largura = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+    const altura  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+    if (largura < W * 0.3 || altura < H * 0.3) return null;
+
+    return { tl, tr, br, bl };
+}
+
+function suavizarFolha(cantos) {
+    folhaBuffer.push(cantos);
+    if (folhaBuffer.length > FOLHA_N) folhaBuffer.shift();
+    const n = folhaBuffer.length;
+    const avg = (k, a) => folhaBuffer.reduce((s, f) => s + f[k][a], 0) / n;
+    return {
+        tl: { x: avg('tl','x'), y: avg('tl','y') },
+        tr: { x: avg('tr','x'), y: avg('tr','y') },
+        br: { x: avg('br','x'), y: avg('br','y') },
+        bl: { x: avg('bl','x'), y: avg('bl','y') },
     };
+}
 
-    function smoothQR(code) {
-        qrBuffer.push({
-            tl: {...code.location.topLeftCorner},
-            tr: {...code.location.topRightCorner},
-            bl: {...code.location.bottomLeftCorner},
-            br: {...code.location.bottomRightCorner},
+// ═══════════════════════════════════════════
+// HOMOGRAFIA 3×3 (src quadrilátero → dst retângulo)
+// ═══════════════════════════════════════════
+function calcH(src, dW, dH) {
+    const srcPts = [src.tl, src.tr, src.br, src.bl];
+    const dstPts = [{x:0,y:0},{x:dW,y:0},{x:dW,y:dH},{x:0,y:dH}];
+    const A = [];
+    for (let i = 0; i < 4; i++) {
+        const {x:xs,y:ys} = srcPts[i], {x:xd,y:yd} = dstPts[i];
+        A.push([-xs,-ys,-1, 0,  0,  0, xd*xs, xd*ys, xd]);
+        A.push([ 0,  0,  0,-xs,-ys,-1, yd*xs, yd*ys, yd]);
+    }
+    const h = gaussElim(A);
+    if (!h) return null;
+    return [...h, 1];
+}
+
+function gaussElim(A) {
+    const n = 8;
+    const M = A.map(r => [...r]);
+    for (let c = 0; c < n; c++) {
+        let mx = c;
+        for (let r = c+1; r < 2*n; r++) if (Math.abs(M[r][c]) > Math.abs(M[mx][c])) mx = r;
+        [M[c], M[mx]] = [M[mx], M[c]];
+        if (Math.abs(M[c][c]) < 1e-10) return null;
+        for (let r = 0; r < 2*n; r++) {
+            if (r === c) continue;
+            const f = M[r][c] / M[c][c];
+            for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+        }
+    }
+    return M.slice(0,n).map((r,i) => r[n]/r[i]);
+}
+
+function invH(m) {
+    const [a,b,c,d,e,f,g,h,ii] = m;
+    const det = a*(e*ii-f*h) - b*(d*ii-f*g) + c*(d*h-e*g);
+    if (Math.abs(det) < 1e-10) return null;
+    return [
+        (e*ii-f*h)/det, (c*h-b*ii)/det, (b*f-c*e)/det,
+        (f*g-d*ii)/det, (a*ii-c*g)/det, (c*d-a*f)/det,
+        (d*h-e*g)/det,  (b*g-a*h)/det,  (a*e-b*d)/det
+    ];
+}
+
+// Aplica homografia: retifica src → retângulo dW×dH
+function retificar(srcData, srcW, srcH, H, dW, dH) {
+    const Hi = invH(H);
+    if (!Hi) return null;
+    const dst   = new ImageData(dW, dH);
+    const dstD  = dst.data;
+    const srcD  = srcData.data;
+    for (let dy = 0; dy < dH; dy++) {
+        for (let dx = 0; dx < dW; dx++) {
+            const w  = Hi[6]*dx + Hi[7]*dy + Hi[8];
+            const sx = (Hi[0]*dx + Hi[1]*dy + Hi[2]) / w;
+            const sy = (Hi[3]*dx + Hi[4]*dy + Hi[5]) / w;
+            const sx0 = Math.floor(sx), sy0 = Math.floor(sy);
+            if (sx0 < 0 || sx0 >= srcW-1 || sy0 < 0 || sy0 >= srcH-1) continue;
+            const fx = sx-sx0, fy = sy-sy0;
+            const i00=(sy0*srcW+sx0)*4, i10=i00+4, i01=((sy0+1)*srcW+sx0)*4, i11=i01+4;
+            const id = (dy*dW+dx)*4;
+            for (let c=0;c<3;c++)
+                dstD[id+c] = (srcD[i00+c]*(1-fx)*(1-fy) + srcD[i10+c]*fx*(1-fy) +
+                               srcD[i01+c]*(1-fx)*fy    + srcD[i11+c]*fx*fy) | 0;
+            dstD[id+3] = 255;
+        }
+    }
+    return dst;
+}
+
+// ═══════════════════════════════════════════
+// SUAVIZAÇÃO QR
+// ═══════════════════════════════════════════
+function smoothQR(code) {
+    qrBuffer.push({
+        tl:{...code.location.topLeftCorner},
+        tr:{...code.location.topRightCorner},
+        bl:{...code.location.bottomLeftCorner},
+        br:{...code.location.bottomRightCorner},
+    });
+    if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
+    const n = qrBuffer.length;
+    const avg = (k,a) => qrBuffer.reduce((s,q)=>s+q[k][a],0)/n;
+    return { location:{
+        topLeftCorner:    {x:avg('tl','x'),y:avg('tl','y')},
+        topRightCorner:   {x:avg('tr','x'),y:avg('tr','y')},
+        bottomLeftCorner: {x:avg('bl','x'),y:avg('bl','y')},
+        bottomRightCorner:{x:avg('br','x'),y:avg('br','y')},
+    }, data: code.data };
+}
+
+// ═══════════════════════════════════════════
+// DESENHO
+// ═══════════════════════════════════════════
+function desenharContornoFolha(c, estavel) {
+    const cor  = estavel ? '#00ff9d' : '#00e5ff';
+    const alfa = estavel ? '0.9'     : '0.6';
+    ctx.strokeStyle = `rgba(${estavel?'0,255,157':'0,229,255'},${alfa})`;
+    ctx.lineWidth = estavel ? 3 : 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(c.tl.x, c.tl.y);
+    ctx.lineTo(c.tr.x, c.tr.y);
+    ctx.lineTo(c.br.x, c.br.y);
+    ctx.lineTo(c.bl.x, c.bl.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = estavel ? 'rgba(0,255,157,0.07)' : 'rgba(0,229,255,0.04)';
+    ctx.fill();
+    // Cantos
+    [c.tl,c.tr,c.br,c.bl].forEach(p => {
+        ctx.beginPath(); ctx.arc(p.x,p.y,6,0,Math.PI*2);
+        ctx.fillStyle = cor; ctx.fill();
+    });
+}
+
+function desenharContornoQR(qr) {
+    const {topLeftCorner:tl,topRightCorner:tr,bottomRightCorner:br,bottomLeftCorner:bl} = qr.location;
+    ctx.strokeStyle = 'rgba(255,214,0,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
+    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
+    ctx.closePath(); ctx.stroke();
+}
+
+// ═══════════════════════════════════════════
+// FLASH
+// ═══════════════════════════════════════════
+async function toggleFlash() {
+    if (!videoTrack) return;
+    try {
+        torchLigada = !torchLigada;
+        await videoTrack.applyConstraints({ advanced: [{ torch: torchLigada }] });
+        document.getElementById('btn-flash').innerText = torchLigada ? '🔦' : '💡';
+        document.getElementById('btn-flash').classList.toggle('active', torchLigada);
+    } catch(e) {
+        showToast('Flash não disponível neste dispositivo');
+        torchLigada = false;
+    }
+}
+
+// ═══════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════
+function setStatus(estado, texto) {
+    statusPill.className = 'status-pill ' + estado;
+    statusTxt.innerText = texto;
+}
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.innerText = msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+// ═══════════════════════════════════════════
+// CÂMERA
+// ═══════════════════════════════════════════
+async function iniciarCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
         });
-        if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
-        const n = qrBuffer.length;
-        const avg = (k, a) => qrBuffer.reduce((s, q) => s + q[k][a], 0) / n;
-        return {
-            location: {
-                topLeftCorner:     {x: avg('tl','x'), y: avg('tl','y')},
-                topRightCorner:    {x: avg('tr','x'), y: avg('tr','y')},
-                bottomLeftCorner:  {x: avg('bl','x'), y: avg('bl','y')},
-                bottomRightCorner: {x: avg('br','x'), y: avg('br','y')},
-            },
-            data: code.data
-        };
+        video.srcObject = stream;
+        videoTrack = stream.getVideoTracks()[0];
+        video.onloadedmetadata = () => { video.play(); requestAnimationFrame(tick); };
+    } catch(err) {
+        setStatus('', 'ERRO: ' + err.name);
+        alert('Erro câmera: ' + err.message);
+    }
+}
+iniciarCamera();
+
+// ═══════════════════════════════════════════
+// LOOP PRINCIPAL
+// ═══════════════════════════════════════════
+let ultimoTick = 0;
+let folhaAtual = null;
+
+function tick(ts) {
+    if (congelado) return;
+    requestAnimationFrame(tick);
+    if (video.readyState < 2) return;
+
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width  = video.videoWidth  || 640;
+        canvas.height = video.videoHeight || 480;
     }
 
-    function qrMoveu(qrA, qrB) {
-        if (!qrA) return true;
-        const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-        return (
-            d(qrA.location.topLeftCorner,     qrB.location.topLeftCorner)     > LIMIAR_MOVIMENTO ||
-            d(qrA.location.topRightCorner,    qrB.location.topRightCorner)    > LIMIAR_MOVIMENTO ||
-            d(qrA.location.bottomLeftCorner,  qrB.location.bottomLeftCorner)  > LIMIAR_MOVIMENTO
-        );
-    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    function setStatus(estado, texto) {
-        statusPill.className = 'status-pill ' + estado;
-        statusTxt.innerText = texto;
-    }
+    // Processa a ~10fps
+    if (ts - ultimoTick < 100) return;
+    ultimoTick = ts;
 
-    function showToast(msg) {
-        const t = document.getElementById('toast');
-        t.innerText = msg;
-        t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 2500);
-    }
+    const W = canvas.width, H = canvas.height;
+    const imgData = ctx.getImageData(0, 0, W, H);
 
-    // ── Desenha contorno do QR ──
-    function desenharQR(qr, estavel) {
-        const {topLeftCorner: tl, topRightCorner: tr, bottomRightCorner: br, bottomLeftCorner: bl} = qr.location;
-        const cor = estavel ? '#00ff9d' : '#00e5ff';
-        const espessura = estavel ? 3 : 2;
+    // 1. Detecta bordas da folha
+    const cantos = detectarCantosFolha(imgData.data, W, H);
 
-        ctx.strokeStyle = cor;
-        ctx.lineWidth = espessura;
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(tl.x, tl.y);
-        ctx.lineTo(tr.x, tr.y);
-        ctx.lineTo(br.x, br.y);
-        ctx.lineTo(bl.x, bl.y);
-        ctx.closePath();
-        ctx.stroke();
+    if (cantos) {
+        framesSemFolha = 0;
+        framesComFolha = Math.min(framesComFolha + 1, FRAMES_ESTAVEL + 5);
+        folhaAtual = suavizarFolha(cantos);
+        const estavel = framesComFolha >= FRAMES_ESTAVEL;
+        desenharContornoFolha(folhaAtual, estavel);
 
-        // Cantos destacados
-        [[tl,tr],[tr,br],[br,bl],[bl,tl]].forEach(([a, b]) => {
-            const len = Math.hypot(b.x-a.x, b.y-a.y) * 0.2;
-            const ux = (b.x-a.x)/Math.hypot(b.x-a.x,b.y-a.y);
-            const uy = (b.y-a.y)/Math.hypot(b.x-a.x,b.y-a.y);
-            ctx.strokeStyle = cor;
-            ctx.lineWidth = estavel ? 5 : 3;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(a.x + ux*len, a.y + uy*len);
-            ctx.stroke();
-        });
-
-        // Barra de progresso de estabilidade
-        if (!estavel && framesEstaveis > 0) {
-            const cx = (tl.x + br.x) / 2;
-            const cy = Math.max(tl.y, tr.y) - 14;
-            const largura = Math.hypot(tr.x-tl.x, tr.y-tl.y);
-            const pct = framesEstaveis / FRAMES_PARA_ESTAVEL;
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(cx - largura/2, cy - 5, largura, 10);
-            ctx.fillStyle = '#00e5ff';
-            ctx.fillRect(cx - largura/2, cy - 5, largura * pct, 10);
-        }
-    }
-
-    // ── FLASH / TORCH ──
-    async function toggleFlash() {
-        if (!videoTrack) return;
-        try {
-            torchLigada = !torchLigada;
-            await videoTrack.applyConstraints({ advanced: [{ torch: torchLigada }] });
-            document.getElementById('btn-flash').innerText = torchLigada ? '🔦' : '💡';
-            showToast(torchLigada ? 'Flash ligado' : 'Flash desligado');
-        } catch (e) {
-            showToast('Flash não disponível');
-            torchLigada = false;
-        }
-    }
-
-    // ── CÂMERA ──
-    async function iniciarCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: {ideal: "environment"},
-                    width: {ideal: 1280}, height: {ideal: 720}
-                }
-            });
-            video.srcObject = stream;
-            videoTrack = stream.getVideoTracks()[0];
-            video.onloadedmetadata = () => {
-                video.play();
-                requestAnimationFrame(tick);
-            };
-        } catch (err) {
-            setStatus('', 'ERRO: ' + err.name);
-            alert("Erro câmera: " + err.message);
-        }
-    }
-    iniciarCamera();
-
-    // ── LOOP ──
-    let ultimoQR = 0;
-    function tick(ts) {
-        if (congelado) return;
-        requestAnimationFrame(tick);
-        if (video.readyState < 2) return;
-
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-            canvas.width  = video.videoWidth  || 640;
-            canvas.height = video.videoHeight || 480;
-        }
-
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        if (ts - ultimoQR < 100) return;
-        ultimoQR = ts;
-
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imgData.data, canvas.width, canvas.height);
-
+        // 2. Detecta QR no frame original
+        const code = jsQR(imgData.data, W, H);
         if (code && code.data.includes('|GB:')) {
-            framesSerQR = 0;
             const match = code.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
             if (match) {
-                const qrS = smoothQR(code);
-
-                // Verifica estabilidade
-                if (!qrMoveu(qrAnterior, qrS)) {
-                    framesEstaveis = Math.min(framesEstaveis + 1, FRAMES_PARA_ESTAVEL);
-                } else {
-                    framesEstaveis = 0;
-                }
-                qrAnterior = qrS;
-
-                const estavel = framesEstaveis >= FRAMES_PARA_ESTAVEL;
-                desenharQR(qrS, estavel);
-                dadosAtuais = { code: qrS, gabarito: match[2], nome: match[1] };
-                btnCapturar.disabled = false;
-                mira.classList.add('oculta');
-
-                if (estavel) {
-                    setStatus('ready', '✅ ESTÁVEL — CAPTURE!');
-                } else {
-                    setStatus('scanning', 'SEGURE FIRME...');
-                }
-            }
-        } else {
-            framesSerQR++;
-            framesEstaveis = 0;
-            qrAnterior = null;
-            if (framesSerQR >= DEBOUNCE && dadosAtuais) {
-                dadosAtuais = null;
-                qrBuffer = [];
-                btnCapturar.disabled = true;
-                setStatus('scanning', 'AGUARDANDO QR CODE');
-                mira.classList.remove('oculta');
-                cardRes.classList.remove('visivel');
+                desenharContornoQR(smoothQR(code));
+                dadosAtuais = { gabarito: match[2], nome: match[1] };
+                btnCapturar.disabled = !estavel;
+                setStatus(estavel ? 'pronto' : 'scanning',
+                    estavel ? '✅ PRONTO — CAPTURE!' : 'QR OK • Centralize a folha...');
+                return;
             }
         }
-    }
 
-    // ── CAPTURAR ──
-    function capturar() {
-        if (!dadosAtuais) return;
-        congelado = true;
-        btnCapturar.style.display = 'none';
-        btnProximo.style.display = 'block';
-        setStatus('frozen', 'CONGELADO');
-        imagemCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        // Redesenha frame limpo e então mostra bolinhas
-        ctx.putImageData(imagemCongelada, 0, 0);
-        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
-    }
-
-    // ── PRÓXIMO ──
-    function proximo() {
-        congelado = false;
-        dadosAtuais = null;
-        imagemCongelada = null;
-        qrBuffer = [];
-        framesSerQR = 0;
-        framesEstaveis = 0;
-        qrAnterior = null;
-        btnCapturar.style.display = 'block';
+        setStatus('scanning', estavel ? 'Folha OK • Procurando QR...' : 'Centralizando folha...');
         btnCapturar.disabled = true;
-        btnProximo.style.display = 'none';
-        cardRes.classList.remove('visivel');
-        mira.classList.remove('oculta');
-        setStatus('scanning', 'AGUARDANDO QR CODE');
-        requestAnimationFrame(tick);
-    }
-
-    // ── PROCESSAR ──
-    function processar(qr, gabarito, nome, finalizar, pixelData) {
-        const tl = qr.location.topLeftCorner;
-        const tr = qr.location.topRightCorner;
-        const bl = qr.location.bottomLeftCorner;
-        const br = qr.location.bottomRightCorner;
-        const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
-        const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
-        const size = (qrW + qrH) / 2;
-        const cx   = (tl.x + br.x) / 2;
-        const cy   = (tl.y + br.y) / 2;
-        const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
-        const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
-
-        const data = pixelData.data;
-        const W = pixelData.width, H = pixelData.height;
-        let acertos = 0;
-
-        // Desenha contorno do QR também na captura
-        desenharQR(qr, true);
-
-        for (let i = 0; i < gabarito.length; i++) {
-            const col = Math.floor(i / 30), lin = i % 30;
-            const bx  = config.offsetX + col * config.colGap;
-            const by  = config.offsetY + lin * config.gapV;
-            let marcada = -1, maxEsc = 0;
-
-            for (let alt = 0; alt < 5; alt++) {
-                const nx = bx + alt * config.gapH, ny = by;
-                const x  = cx + nx*size*ux + ny*size*vx;
-                const y  = cy + nx*size*uy + ny*size*vy;
-                if (x < 1 || x > W-2 || y < 1 || y > H-2) continue;
-
-                let esc = 0;
-                for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-                    const px = Math.floor(x+dx), py = Math.floor(y+dy);
-                    const idx = (py*W+px)*4;
-                    esc += 255 - ((data[idx]+data[idx+1]+data[idx+2])/3);
-                }
-                esc /= 9;
-
-                const marcadaEsta = esc > config.threshold;
-                const correta = String.fromCharCode(65+alt) === gabarito[i];
-
-                ctx.beginPath();
-                ctx.arc(x, y, 8, 0, Math.PI*2);
-                ctx.fillStyle = marcadaEsta
-                    ? (correta ? 'rgba(0,255,157,0.9)' : 'rgba(255,61,90,0.9)')
-                    : 'rgba(255,255,255,0.2)';
-                ctx.fill();
-                ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,0.6)';
-                ctx.font = 'bold 7px monospace';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(String.fromCharCode(65+alt), x, y);
-
-                if (marcadaEsta && esc > maxEsc) { maxEsc = esc; marcada = alt; }
-            }
-            if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
-        }
-
-        if (finalizar) {
-            const total = gabarito.length;
-            const pct = Math.round((acertos/total)*100);
-            resNome.innerText = nome;
-            resAcertos.innerText = acertos;
-            resTotal.innerText = `/ ${total}`;
-            barraFill.style.width = pct + '%';
-            cardRes.classList.add('visivel');
-            const idx = historico.findIndex(h => h.nome === nome);
-            const entrada = {nome, acertos, total, pct};
-            if (idx >= 0) historico[idx] = entrada; else historico.push(entrada);
-            atualizarBadge();
-        }
-    }
-
-    // ── CALIBRAÇÃO ──
-    function syncCalib(key, input, dec, spanId) {
-        config[key] = parseFloat(input.value);
-        document.getElementById(spanId).innerText = config[key].toFixed(dec);
-        if (congelado && dadosAtuais && imagemCongelada) {
-            ctx.putImageData(imagemCongelada, 0, 0);
-            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
-        }
-    }
-    function abrirCalib()  { document.getElementById('drawer-calib').classList.add('aberto'); }
-    function fecharCalib() { document.getElementById('drawer-calib').classList.remove('aberto'); }
-    function copiarConfig() {
-        const txt = `offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
-        navigator.clipboard.writeText(txt).catch(()=>{});
-        showToast('Valores copiados!');
-    }
-
-    // ── HISTÓRICO ──
-    function atualizarBadge() {
-        document.getElementById('hist-badge').innerText = historico.length;
-        document.getElementById('hist-count-label').innerText = historico.length;
-    }
-    function abrirDrawer() {
-        const lista = document.getElementById('drawer-lista');
-        const resumo = document.getElementById('drawer-resumo');
-        if (!historico.length) {
-            lista.innerHTML = '<div class="drawer-vazio">Nenhuma prova corrigida ainda.</div>';
-            resumo.innerText = '';
-        } else {
-            const media = Math.round(historico.reduce((s,h)=>s+h.pct,0)/historico.length);
-            resumo.innerText = `média ${media}%`;
-            lista.innerHTML = historico.slice().sort((a,b)=>b.acertos-a.acertos).map(h=>`
-                <div class="historico-item">
-                    <div><div class="hist-nome">${h.nome}</div><div class="hist-pct">${h.pct}% de acerto</div></div>
-                    <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
-                </div>`).join('');
-        }
-        document.getElementById('drawer').classList.add('aberto');
-    }
-    function fecharDrawer() { document.getElementById('drawer').classList.remove('aberto'); }
-    function exportarCSV() {
-        if (!historico.length) { showToast('Nenhum resultado ainda'); return; }
-        const linhas = ['Nome,Acertos,Total,Porcentagem'];
-        historico.forEach(h => linhas.push(`"${h.nome}",${h.acertos},${h.total},${h.pct}%`));
-        const blob = new Blob([linhas.join('\n')], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download='resultados_omr.csv'; a.click();
-        URL.revokeObjectURL(url);
-        showToast('CSV exportado!');
-    }
-</script>
-    const ctx         = canvas.getContext('2d');
-    const mira        = document.getElementById('mira');
-    const statusPill  = document.getElementById('status-pill');
-    const statusTxt   = document.getElementById('status-txt');
-    const cardRes     = document.getElementById('card-resultado');
-    const resNome     = document.getElementById('res-nome');
-    const resAcertos  = document.getElementById('res-acertos');
-    const resTotal    = document.getElementById('res-total');
-    const barraFill   = document.getElementById('barra-fill');
-    const btnCapturar = document.getElementById('btn-capturar');
-    const btnProximo  = document.getElementById('btn-proximo');
-
-    let congelado = false;
-    let dadosAtuais = null;
-    let imagemCongelada = null;
-    let historico = [];
-
-    // Suavização QR
-    const SMOOTH_N = 5;
-    let qrBuffer = [];
-    let framesSerQR = 0;
-    const DEBOUNCE = 8;
-
-    const config = {
-        offsetX: -2.175, offsetY: 1.560,
-        gapH: 0.611, gapV: 0.335,
-        colGap: 1.680, threshold: 81
-    };
-
-    function smoothQR(code) {
-        qrBuffer.push({
-            tl: {...code.location.topLeftCorner},
-            tr: {...code.location.topRightCorner},
-            bl: {...code.location.bottomLeftCorner},
-            br: {...code.location.bottomRightCorner},
-        });
-        if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
-        const n = qrBuffer.length;
-        const avg = (k, a) => qrBuffer.reduce((s, q) => s + q[k][a], 0) / n;
-        return {
-            location: {
-                topLeftCorner:     {x: avg('tl','x'), y: avg('tl','y')},
-                topRightCorner:    {x: avg('tr','x'), y: avg('tr','y')},
-                bottomLeftCorner:  {x: avg('bl','x'), y: avg('bl','y')},
-                bottomRightCorner: {x: avg('br','x'), y: avg('br','y')},
-            },
-            data: code.data
-        };
-    }
-
-    function setStatus(estado, texto) {
-        statusPill.className = 'status-pill ' + estado;
-        statusTxt.innerText = texto;
-    }
-
-    function showToast(msg) {
-        const t = document.getElementById('toast');
-        t.innerText = msg;
-        t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 2000);
-    }
-
-    // ── CÂMERA ──
-    async function iniciarCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: {ideal: "environment"} }
-            });
-            video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                video.play();
-                requestAnimationFrame(tick);
-            };
-        } catch (err) {
-            setStatus('', 'ERRO: ' + err.name);
-            alert("Erro câmera: " + err.message);
-        }
-    }
-    iniciarCamera();
-
-    // ── LOOP ──
-    let ultimoQR = 0;
-    function tick(ts) {
-        if (congelado) return;
-        requestAnimationFrame(tick);
-        if (video.readyState < 2) return;
-
-        // Ajusta canvas ao tamanho real do vídeo
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-            canvas.width  = video.videoWidth  || 640;
-            canvas.height = video.videoHeight || 480;
-        }
-
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Limita leitura do QR a ~10fps
-        if (ts - ultimoQR < 100) return;
-        ultimoQR = ts;
-
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imgData.data, canvas.width, canvas.height);
-
-        if (code && code.data.includes('|GB:')) {
-            framesSerQR = 0;
-            const match = code.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-            if (match) {
-                const qrS = smoothQR(code);
-                processar(qrS, match[2], match[1], false, imgData);
-                dadosAtuais = { code: qrS, gabarito: match[2], nome: match[1] };
-                setStatus('ready', 'QR DETECTADO ✓');
-                mira.classList.add('oculta');
-                btnCapturar.disabled = false;
-            }
-        } else {
-            framesSerQR++;
-            if (framesSerQR >= DEBOUNCE && dadosAtuais) {
-                dadosAtuais = null;
-                qrBuffer = [];
-                btnCapturar.disabled = true;
-                setStatus('scanning', 'AGUARDANDO QR CODE');
-                mira.classList.remove('oculta');
-                cardRes.classList.remove('visivel');
-            }
-        }
-    }
-
-    // ── CAPTURAR ──
-    function capturar() {
-        if (!dadosAtuais) return;
-        congelado = true;
-        btnCapturar.style.display = 'none';
-        btnProximo.style.display = 'block';
-        setStatus('frozen', 'CONGELADO');
-        imagemCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
-    }
-
-    // ── PRÓXIMO ──
-    function proximo() {
-        congelado = false;
         dadosAtuais = null;
-        imagemCongelada = null;
-        qrBuffer = [];
-        framesSerQR = 0;
-        btnCapturar.style.display = 'block';
-        btnCapturar.disabled = true;
-        btnProximo.style.display = 'none';
-        cardRes.classList.remove('visivel');
-        mira.classList.remove('oculta');
-        setStatus('scanning', 'AGUARDANDO QR CODE');
-        requestAnimationFrame(tick);
+
+    } else {
+        framesSemFolha++;
+        framesComFolha = 0;
+        if (framesSemFolha >= DEBOUNCE_OFF) {
+            folhaAtual = null;
+            folhaBuffer = [];
+            dadosAtuais = null;
+            btnCapturar.disabled = true;
+            setStatus('scanning', 'APONTE PARA A FOLHA');
+        }
     }
+}
 
-    // ── PROCESSAR ──
-    function processar(qr, gabarito, nome, finalizar, pixelData) {
-        const tl = qr.location.topLeftCorner;
-        const tr = qr.location.topRightCorner;
-        const bl = qr.location.bottomLeftCorner;
-        const br = qr.location.bottomRightCorner;
+// ═══════════════════════════════════════════
+// CAPTURAR — aplica homografia e lê o QR na imagem retificada
+// ═══════════════════════════════════════════
+function capturar() {
+    if (!dadosAtuais || !folhaAtual) return;
+    congelado = true;
+    btnCapturar.style.display = 'none';
+    btnProximo.style.display  = 'block';
+    setStatus('frozen', 'PROCESSANDO...');
 
-        const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
-        const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
-        const size = (qrW + qrH) / 2;
-        const cx   = (tl.x + br.x) / 2;
-        const cy   = (tl.y + br.y) / 2;
+    const W = canvas.width, H = canvas.height;
+    const frameAtual = ctx.getImageData(0, 0, W, H);
 
-        // Vetores reais dos lados do QR (correção de perspectiva)
-        const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
-        const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
+    // Tamanho A4 proporcional
+    const A4W = 794, A4H = 1123;
+    const Hmat = calcH(folhaAtual, A4W, A4H);
 
-        const data = pixelData.data;
-        const W = pixelData.width, H = pixelData.height;
-        let acertos = 0;
+    if (Hmat) {
+        const ret = retificar(frameAtual, W, H, Hmat, A4W, A4H);
+        if (ret) {
+            canvas.width  = A4W;
+            canvas.height = A4H;
+            ctx.putImageData(ret, 0, 0);
 
-        for (let i = 0; i < gabarito.length; i++) {
-            const col  = Math.floor(i / 30);
-            const lin  = i % 30;
-            const bx   = config.offsetX + col * config.colGap;
-            const by   = config.offsetY + lin * config.gapV;
-
-            let marcada = -1, maxEsc = 0;
-
-            for (let alt = 0; alt < 5; alt++) {
-                const nx = bx + alt * config.gapH;
-                const ny = by;
-                const x  = cx + nx * size * ux + ny * size * vx;
-                const y  = cy + nx * size * uy + ny * size * vy;
-
-                if (x < 1 || x > W-2 || y < 1 || y > H-2) continue;
-
-                let esc = 0;
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        const px  = Math.floor(x+dx);
-                        const py  = Math.floor(y+dy);
-                        const idx = (py * W + px) * 4;
-                        esc += 255 - ((data[idx] + data[idx+1] + data[idx+2]) / 3);
-                    }
+            // Relê QR na imagem retificada
+            const qrRet = jsQR(ret.data, A4W, A4H);
+            if (qrRet && qrRet.data.includes('|GB:')) {
+                const match = qrRet.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+                if (match) {
+                    imgCongelada = ret;
+                    qrCongelado  = smoothQR(qrRet);
+                    processar(qrCongelado, match[2], match[1], ret);
+                    setStatus('frozen', 'CONGELADO');
+                    return;
                 }
-                esc /= 9;
-
-                const marcadaEsta = esc > config.threshold;
-                const correta = String.fromCharCode(65+alt) === gabarito[i];
-
-                ctx.beginPath();
-                ctx.arc(x, y, 8, 0, Math.PI*2);
-                ctx.fillStyle = marcadaEsta
-                    ? (correta ? 'rgba(0,255,157,0.88)' : 'rgba(255,61,90,0.88)')
-                    : 'rgba(255,255,255,0.18)';
-                ctx.fill();
-
-                ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,0.55)';
-                ctx.font = 'bold 7px monospace';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(String.fromCharCode(65+alt), x, y);
-
-                if (marcadaEsta && esc > maxEsc) { maxEsc = esc; marcada = alt; }
             }
-            if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
-        }
 
-        if (finalizar) {
-            const total = gabarito.length;
-            const pct   = Math.round((acertos/total)*100);
-            resNome.innerText     = nome;
-            resAcertos.innerText  = acertos;
-            resTotal.innerText    = `/ ${total}`;
-            barraFill.style.width = pct + '%';
-            cardRes.classList.add('visivel');
-            const idx = historico.findIndex(h => h.nome === nome);
-            const entrada = {nome, acertos, total, pct};
-            if (idx >= 0) historico[idx] = entrada; else historico.push(entrada);
-            atualizarBadge();
+            // QR não encontrado na retificada — usa dados do live
+            imgCongelada = ret;
+            // Tenta reler QR com o qrBuffer atual
+            if (qrBuffer.length > 0) {
+                const qrS = smoothQR({data: dadosAtuais.gabarito, location: qrBuffer[qrBuffer.length-1]});
+                processar(qrS, dadosAtuais.gabarito, dadosAtuais.nome, ret);
+            }
+            setStatus('frozen', 'CONGELADO (sem QR retif.)');
+            return;
         }
     }
 
-    // ── CALIBRAÇÃO ──
-    function syncCalib(key, input, dec, spanId) {
-        config[key] = parseFloat(input.value);
-        document.getElementById(spanId).innerText = config[key].toFixed(dec);
-        if (congelado && dadosAtuais && imagemCongelada) {
-            ctx.putImageData(imagemCongelada, 0, 0);
-            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
+    // Fallback — sem homografia
+    imgCongelada = frameAtual;
+    ctx.putImageData(frameAtual, 0, 0);
+    const qrFb = jsQR(frameAtual.data, W, H);
+    if (qrFb) {
+        const match = qrFb.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+        if (match) {
+            qrCongelado = smoothQR(qrFb);
+            processar(qrCongelado, match[2], match[1], frameAtual);
         }
     }
-    function abrirCalib()  { document.getElementById('drawer-calib').classList.add('aberto'); }
-    function fecharCalib() { document.getElementById('drawer-calib').classList.remove('aberto'); }
-    function copiarConfig() {
-        const txt = `offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
-        navigator.clipboard.writeText(txt).catch(()=>{});
-        showToast('Valores copiados!');
-    }
+    setStatus('frozen', 'CONGELADO');
+}
 
-    // ── HISTÓRICO ──
-    function atualizarBadge() {
-        document.getElementById('hist-badge').innerText = historico.length;
-        document.getElementById('hist-count-label').innerText = historico.length;
-    }
-    function abrirDrawer() {
-        const lista = document.getElementById('drawer-lista');
-        const resumo = document.getElementById('drawer-resumo');
-        if (!historico.length) {
-            lista.innerHTML = '<div class="drawer-vazio">Nenhuma prova corrigida ainda.</div>';
-            resumo.innerText = '';
-        } else {
-            const media = Math.round(historico.reduce((s,h) => s+h.pct, 0) / historico.length);
-            resumo.innerText = `média ${media}%`;
-            lista.innerHTML = historico.slice().sort((a,b) => b.acertos-a.acertos).map(h => `
-                <div class="historico-item">
-                    <div><div class="hist-nome">${h.nome}</div><div class="hist-pct">${h.pct}% de acerto</div></div>
-                    <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
-                </div>`).join('');
+// ═══════════════════════════════════════════
+// PROCESSAR bolinhas
+// ═══════════════════════════════════════════
+function processar(qr, gabarito, nome, pixelData) {
+    const tl = qr.location.topLeftCorner,    tr = qr.location.topRightCorner;
+    const bl = qr.location.bottomLeftCorner, br = qr.location.bottomRightCorner;
+    const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+    const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+    const size = (qrW + qrH) / 2;
+    const cx   = (tl.x + br.x) / 2, cy = (tl.y + br.y) / 2;
+    const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
+    const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
+
+    const d = pixelData.data, W = pixelData.width, H = pixelData.height;
+    let acertos = 0;
+
+    // Desenha contorno QR na captura
+    desenharContornoQR(qr);
+
+    for (let i = 0; i < gabarito.length; i++) {
+        const col = Math.floor(i/30), lin = i%30;
+        const bx  = config.offsetX + col*config.colGap;
+        const by  = config.offsetY + lin*config.gapV;
+        let marcada = -1, maxEsc = 0;
+
+        for (let alt = 0; alt < 5; alt++) {
+            const nx = bx + alt*config.gapH, ny = by;
+            const x  = cx + nx*size*ux + ny*size*vx;
+            const y  = cy + nx*size*uy + ny*size*vy;
+            if (x<1||x>W-2||y<1||y>H-2) continue;
+
+            let esc = 0;
+            for (let dx=-1;dx<=1;dx++) for (let dy=-1;dy<=1;dy++) {
+                const px=Math.floor(x+dx), py=Math.floor(y+dy);
+                const idx=(py*W+px)*4;
+                esc += 255 - ((d[idx]+d[idx+1]+d[idx+2])/3);
+            }
+            esc /= 9;
+
+            const marcadaEsta = esc > config.threshold;
+            const correta     = String.fromCharCode(65+alt) === gabarito[i];
+
+            ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2);
+            ctx.fillStyle = marcadaEsta ? (correta?'rgba(0,255,157,.9)':'rgba(255,61,90,.9)') : 'rgba(255,255,255,.18)';
+            ctx.fill();
+            ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,.55)';
+            ctx.font = 'bold 7px monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String.fromCharCode(65+alt), x, y);
+
+            if (marcadaEsta && esc > maxEsc) { maxEsc=esc; marcada=alt; }
         }
-        document.getElementById('drawer').classList.add('aberto');
+        if (marcada!==-1 && String.fromCharCode(65+marcada)===gabarito[i]) acertos++;
     }
-    function fecharDrawer() { document.getElementById('drawer').classList.remove('aberto'); }
 
-    // ── CSV ──
-    function exportarCSV() {
-        if (!historico.length) { showToast('Nenhum resultado ainda'); return; }
-        const linhas = ['Nome,Acertos,Total,Porcentagem'];
-        historico.forEach(h => linhas.push(`"${h.nome}",${h.acertos},${h.total},${h.pct}%`));
-        const blob = new Blob([linhas.join('\n')], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'resultados_omr.csv'; a.click();
-        URL.revokeObjectURL(url);
-        showToast('CSV exportado!');
+    const total = gabarito.length, pct = Math.round((acertos/total)*100);
+    resNome.innerText     = nome;
+    resAcertos.innerText  = acertos;
+    resTotal.innerText    = `/ ${total}`;
+    barraFill.style.width = pct+'%';
+    cardRes.classList.add('visivel');
+    const idx = historico.findIndex(h=>h.nome===nome);
+    const ent = {nome,acertos,total,pct};
+    if (idx>=0) historico[idx]=ent; else historico.push(ent);
+    atualizarBadge();
+}
+
+// ═══════════════════════════════════════════
+// PRÓXIMO
+// ═══════════════════════════════════════════
+function proximo() {
+    congelado=false; dadosAtuais=null; imgCongelada=null; qrCongelado=null;
+    qrBuffer=[]; folhaBuffer=[]; folhaAtual=null;
+    framesComFolha=0; framesSemFolha=0;
+    btnCapturar.style.display='block'; btnCapturar.disabled=true;
+    btnProximo.style.display='none';
+    cardRes.classList.remove('visivel');
+    setStatus('scanning','APONTE PARA A FOLHA');
+    requestAnimationFrame(tick);
+}
+
+// ═══════════════════════════════════════════
+// CALIBRAÇÃO
+// ═══════════════════════════════════════════
+function syncCalib(key,input,dec,spanId) {
+    config[key] = parseFloat(input.value);
+    document.getElementById(spanId).innerText = config[key].toFixed(dec);
+    if (congelado && imgCongelada && qrCongelado) {
+        ctx.putImageData(imgCongelada,0,0);
+        processar(qrCongelado, dadosAtuais.gabarito, dadosAtuais.nome, imgCongelada);
     }
+}
+function abrirCalib()  { document.getElementById('drawer-calib').classList.add('aberto'); }
+function fecharCalib() { document.getElementById('drawer-calib').classList.remove('aberto'); }
+function copiarConfig() {
+    const t=`offsetX:${config.offsetX.toFixed(3)}, offsetY:${config.offsetY.toFixed(3)}, gapH:${config.gapH.toFixed(3)}, gapV:${config.gapV.toFixed(3)}, colGap:${config.colGap.toFixed(3)}, threshold:${config.threshold}`;
+    navigator.clipboard.writeText(t).catch(()=>{});
+    showToast('Copiado!');
+}
+
+// ═══════════════════════════════════════════
+// HISTÓRICO / CSV
+// ═══════════════════════════════════════════
+function atualizarBadge() {
+    document.getElementById('hist-badge').innerText = historico.length;
+    document.getElementById('hist-count-label').innerText = historico.length;
+}
+function abrirDrawer() {
+    const lista=document.getElementById('drawer-lista'), resumo=document.getElementById('drawer-resumo');
+    if (!historico.length) { lista.innerHTML='<div class="drawer-vazio">Nenhuma prova ainda.</div>'; resumo.innerText=''; }
+    else {
+        const media=Math.round(historico.reduce((s,h)=>s+h.pct,0)/historico.length);
+        resumo.innerText=`média ${media}%`;
+        lista.innerHTML=historico.slice().sort((a,b)=>b.acertos-a.acertos).map(h=>`
+            <div class="historico-item">
+                <div><div class="hist-nome">${h.nome}</div><div class="hist-pct">${h.pct}%</div></div>
+                <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
+            </div>`).join('');
+    }
+    document.getElementById('drawer').classList.add('aberto');
+}
+function fecharDrawer() { document.getElementById('drawer').classList.remove('aberto'); }
+function exportarCSV() {
+    if (!historico.length) { showToast('Nenhum resultado ainda'); return; }
+    const l=['Nome,Acertos,Total,Porcentagem'];
+    historico.forEach(h=>l.push(`"${h.nome}",${h.acertos},${h.total},${h.pct}%`));
+    const b=new Blob([l.join('\n')],{type:'text/csv;charset=utf-8;'});
+    const u=URL.createObjectURL(b), a=document.createElement('a');
+    a.href=u; a.download='resultados_omr.csv'; a.click(); URL.revokeObjectURL(u);
+    showToast('CSV exportado!');
+}
 </script>
 </body>
 </html>
