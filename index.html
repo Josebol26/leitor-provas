@@ -2,160 +2,187 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MeuGerador - Web Scanner</title>
-    <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MeuGerador - Scanner Web</title>
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady()" type="text/javascript"></script>
     <style>
-        body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; text-align: center; }
-        .container { padding: 20px; }
-        #video-container { position: relative; display: inline-block; width: 100%; max-width: 500px; border-radius: 15px; overflow: hidden; border: 2px solid #333; }
-        video { width: 100%; display: block; }
-        .target-box { position: absolute; top: 10%; right: 10%; width: 80px; height: 80px; border: 3px dashed #00ff00; border-radius: 8px; box-shadow: 0 0 10px rgba(0,255,0,0.5); }
-        .controls { margin-top: 20px; }
-        button { background: #228B22; color: white; border: none; padding: 15px 35px; border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        :root { --primary: #228B22; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
+        
+        .header { padding: 20px; text-align: center; width: 100%; background: var(--card); box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        h2 { margin: 0; font-size: 1.5rem; color: var(--primary); }
+
+        #video-container { position: relative; width: 95vw; max-width: 500px; height: 65vh; margin-top: 15px; border-radius: 15px; overflow: hidden; border: 2px solid #333; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Mira do QR Code */
+        .target-box { position: absolute; top: 10%; right: 10%; width: 80px; height: 80px; border: 3px dashed var(--primary); border-radius: 8px; box-shadow: 0 0 15px rgba(34, 139, 34, 0.4); pointer-events: none; }
+        .target-box::after { content: "QR CODE AQUI"; position: absolute; bottom: -25px; left: 0; width: 100%; font-size: 10px; text-align: center; color: var(--primary); font-weight: bold; }
+
+        .controls { padding: 25px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        
+        button { background: var(--primary); color: white; border: none; padding: 18px 45px; border-radius: 50px; font-size: 18px; font-weight: bold; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); width: 80%; max-width: 300px; }
+        button:disabled { background: #444; cursor: not-allowed; transform: scale(1) !important; }
         button:active { transform: scale(0.95); }
-        #status { margin-top: 20px; padding: 15px; border-radius: 10px; font-size: 1.2rem; min-height: 50px; }
-        .success { background: #1b5e20; color: #fff; }
-        .error { background: #b71c1c; color: #fff; }
+
+        #status { width: 85%; max-width: 400px; padding: 15px; border-radius: 12px; font-size: 1.1rem; text-align: center; background: var(--card); border: 1px solid #333; transition: 0.3s; }
+        .success { border-color: var(--primary) !important; background: #1b5e20 !important; font-weight: bold; }
+        .error { border-color: #b71c1c !important; background: #451010 !important; }
+
         canvas { display: none; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>MeuGerador Web</h2>
-    <div id="video-container">
-        <video id="video" playsinline></video>
-        <div class="target-box"></div>
-    </div>
-
-    <div class="controls">
-        <button onclick="corrigir()">CAPTURAR E CORRIGIR</button>
-    </div>
-
-    <div id="status">Aguardando OpenCV...</div>
-    <canvas id="canvasOutput"></canvas>
+<div class="header">
+    <h2>MEUGERADOR <span>MÓVEL</span></h2>
 </div>
+
+<div id="video-container">
+    <video id="video" playsinline></video>
+    <div class="target-box"></div>
+</div>
+
+<div class="controls">
+    <div id="status">Carregando motor de visão...</div>
+    <button id="btn-scan" onclick="corrigir()" disabled>CORRIGIR PROVA</button>
+</div>
+
+<canvas id="canvasOutput"></canvas>
 
 <script>
     const video = document.getElementById('video');
     const status = document.getElementById('status');
+    const btn = document.getElementById('btn-scan');
     const canvas = document.getElementById('canvasOutput');
 
-    // Inicializa a câmera
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(stream => {
-            video.srcObject = stream;
-            video.play();
-        });
+    let cvReady = false;
 
-    // Avisa quando o OpenCV estiver pronto
-    var cvReady = false;
-    window.onload = () => {
-        status.innerText = "Carregando motor de visão...";
-        setTimeout(() => {
-            if(typeof cv !== 'undefined') {
-                status.innerText = "Pronto para Corrigir";
-                cvReady = true;
-            }
-        }, 3000);
-    };
+    // 1. Função chamada quando o OpenCV.js termina de carregar
+    function onOpenCvReady() {
+        console.log("Motor OpenCV Pronto.");
+        cvReady = true;
+        status.innerText = "Pronto para Corrigir";
+        btn.disabled = false;
+    }
 
-    function corrigir() {
+    // 2. Acesso à câmera traseira com foco contínuo
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+        } 
+    })
+    .then(stream => {
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.play();
+    })
+    .catch(err => {
+        status.className = "error";
+        status.innerText = "Erro na câmera: " + err.message;
+    });
+
+    // 3. Lógica de Processamento OMR
+    async function corrigir() {
         if (!cvReady) return;
+
+        // Feedback visual imediato
         status.className = "";
-        status.innerText = "Processando...";
+        status.innerText = "Processando nota...";
+        btn.disabled = true;
 
-        const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        let src = cv.imread(canvas);
-        let gray = new cv.Mat();
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-        // Detector de QR Code (Mesma lógica do Python)
-        let detector = new cv.QRCodeDetector();
-        let points = new cv.Mat();
-        let code = detector.decode(gray, points);
-
-        if (code) {
+        // Pequeno delay para garantir que o frame foi capturado corretamente
+        setTimeout(() => {
             try {
-                // Pega os pontos do QR Code para calibragem
-                let p0x = points.floatAt(0, 0);
-                let p0y = points.floatAt(0, 1);
-                let p1x = points.floatAt(0, 2);
-                let p1y = points.floatAt(0, 3);
-                
-                // Cálculo da largura do QR (larg_qr)
-                let larg_qr = Math.sqrt(Math.pow(p0x - p1x, 2) + Math.pow(p0y - p1y, 2));
+                const ctx = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                // --- SUA CALIBRAGEM V3.3 APLICADA ---
-                let start_x = p0x - (larg_qr * 1.74);
-                let start_y = p0y + (larg_qr * 2.05);
-                let esp_lin = larg_qr * 0.340;
-                let esp_col = larg_qr * 0.625;
-                let raio = larg_qr * 0.16;
+                let src = cv.imread(canvas);
+                let gray = new cv.Mat();
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-                // Processamento de imagem para OMR
-                let blurred = new cv.Mat();
-                let thresh = new cv.Mat();
-                cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-                cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                let detector = new cv.QRCodeDetector();
+                let points = new cv.Mat();
+                let code = detector.decode(gray, points);
 
-                let acertos = 0;
-                let dados = code.split('|');
-                let aluno = dados[0].replace("AL:", "");
-                let gabarito = dados[1] ? dados[1].replace("GB:", "").trim() : "";
-                let alternativas = ['A', 'B', 'C', 'D', 'E'];
+                if (code) {
+                    // CALIBRAGEM V3.3 - PARÂMETROS JOSÉ LUIZ
+                    let p0x = points.floatAt(0, 0);
+                    let p0y = points.floatAt(0, 1);
+                    let p1x = points.floatAt(0, 2);
+                    let p1y = points.floatAt(0, 3);
+                    let larg_qr = Math.sqrt(Math.pow(p0x - p1x, 2) + Math.pow(p0y - p1y, 2));
 
-                for (let q = 0; q < 15; q++) {
-                    let y_at = start_y + (q * esp_lin);
-                    let pixels_max = -1;
-                    let idx_marcado = -1;
+                    let start_x = p0x - (larg_qr * 1.74);
+                    let start_y = p0y + (larg_qr * 2.05);
+                    let esp_lin = larg_qr * 0.340;
+                    let esp_col = larg_qr * 0.625;
+                    let raio = larg_qr * 0.16;
 
-                    for (let a = 0; a < 5; a++) {
-                        let x_at = start_x + (a * esp_col);
-                        
-                        // Criar máscara para a bolinha
-                        let mask = cv.Mat.zeros(thresh.rows, thresh.cols, cv.CV_8U);
-                        let center = new cv.Point(x_at, y_at);
-                        cv.circle(mask, center, raio, new cv.Scalar(255), -1);
-                        
-                        let maskedThresh = new cv.Mat();
-                        cv.bitwise_and(thresh, thresh, maskedThresh, mask);
-                        let count = cv.countNonZero(maskedThresh);
-                        
-                        if (count > pixels_max) {
-                            pixels_max = count;
-                            idx_marcado = a;
+                    let blurred = new cv.Mat();
+                    let thresh = new cv.Mat();
+                    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+                    cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+
+                    let acertos = 0;
+                    let dados = code.split('|');
+                    let aluno = dados[0].replace("AL:", "");
+                    let gabarito = dados[1] ? dados[1].replace("GB:", "").trim() : "";
+                    let alternativas = ['A', 'B', 'C', 'D', 'E'];
+
+                    for (let q = 0; q < 15; q++) {
+                        let y_at = start_y + (q * esp_lin);
+                        let pixels_max = -1;
+                        let idx_marcado = -1;
+
+                        for (let a = 0; a < 5; a++) {
+                            let x_at = start_x + (a * esp_col);
+                            let mask = cv.Mat.zeros(thresh.rows, thresh.cols, cv.CV_8U);
+                            cv.circle(mask, new cv.Point(x_at, y_at), Math.round(raio), new cv.Scalar(255), -1);
+                            
+                            let maskedThresh = new cv.Mat();
+                            cv.bitwise_and(thresh, thresh, maskedThresh, mask);
+                            let count = cv.countNonZero(maskedThresh);
+                            
+                            if (count > pixels_max) {
+                                pixels_max = count;
+                                idx_marcado = a;
+                            }
+                            mask.delete(); maskedThresh.delete();
                         }
-                        mask.delete(); maskedThresh.delete();
+
+                        // Critério de preenchimento (75% da área da bolinha)
+                        if (pixels_max > (raio * raio * Math.PI * 0.5)) { 
+                            if (gabarito && q < gabarito.length && alternativas[idx_marcado] === gabarito[q]) {
+                                acertos += 1;
+                            }
+                        }
                     }
 
-                    if (pixels_max > (raio * raio * 0.75)) {
-                        if (gabarito && q < gabarito.length && alternativas[idx_marcado] === gabarito[q]) {
-                            acertos += 1;
-                        }
-                    }
+                    status.className = "success";
+                    status.innerHTML = `ALUNO: ${aluno}<br>NOTA: ${acertos}/15`;
+                    
+                    blurred.delete(); thresh.delete();
+                } else {
+                    status.className = "error";
+                    status.innerText = "QR Code não detectado. Aproxime ou foque!";
                 }
 
-                status.className = "success";
-                status.innerText = `ALUNO: ${aluno} | NOTA: ${acertos}/15`;
+                // Limpeza de memória do OpenCV
+                src.delete(); gray.delete(); points.delete();
+                btn.disabled = false;
 
-                blurred.delete(); thresh.delete();
-            } catch (e) {
+            } catch (err) {
+                console.error(err);
                 status.className = "error";
-                status.innerText = "Erro no cálculo. Centralize a folha.";
-                console.error(e);
+                status.innerText = "Falha no motor gráfico.";
+                btn.disabled = false;
             }
-        } else {
-            status.className = "error";
-            status.innerText = "QR Code não encontrado!";
-        }
-
-        src.delete(); gray.delete(); points.delete();
+        }, 150);
     }
 </script>
 
