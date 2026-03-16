@@ -2,316 +2,372 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMR — Diagnóstico</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OMR Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg:#080c10; --surface:#0e1419; --border:#1e2a35;
             --accent:#00e5ff; --accent2:#00ff9d; --danger:#ff3d5a;
-            --text:#e8f0f5; --muted:#52687a; --card:#111922;
+            --text:#e8f0f5; --muted:#4a6070; --card:#111922;
         }
         * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:grid; grid-template-columns:260px 1fr; overflow:hidden; }
+        body { font-family:'Syne',sans-serif; background:#000; color:var(--text); overflow:hidden; height:100vh; width:100vw; }
 
-        .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:20px 16px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
-        .brand { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:.2em; color:var(--accent); }
-        h1 { font-size:16px; font-weight:800; margin-top:4px; line-height:1.3; }
-        h1 em { color:var(--accent2); font-style:normal; }
+        #video  { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
+        #canvas { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; filter:brightness(1.2) contrast(1.05); }
 
-        .sec { font-size:9px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:6px; }
+        .overlay-bottom { position:fixed; bottom:0; left:0; right:0; height:45%; background:linear-gradient(to top,rgba(8,12,16,.93) 30%,transparent); z-index:2; pointer-events:none; }
 
-        .upload-zone { border:2px dashed var(--border); border-radius:10px; padding:16px 10px; text-align:center; cursor:pointer; transition:all .2s; background:var(--bg); position:relative; }
-        .upload-zone:hover { border-color:var(--accent); }
-        .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
-        .upload-lbl { font-size:12px; font-weight:700; color:var(--accent); margin-top:4px; }
-        .upload-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+        .header { position:fixed; top:0; left:0; right:0; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:16px 20px 12px; background:linear-gradient(to bottom,rgba(8,12,16,.95),transparent); }
+        .logo { font-family:'Space Mono',monospace; font-size:13px; letter-spacing:.15em; color:var(--accent); }
+        .logo span { color:var(--muted); }
+        .icon-btn { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:16px; cursor:pointer; color:white; line-height:1; transition:all .2s; }
+        .icon-btn.active { border-color:#ffd600; background:rgba(255,214,0,.15); }
 
-        /* Slider threshold */
-        .thresh-wrap { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
-        .thresh-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
-        .thresh-row input { flex:1; accent-color:var(--accent); }
-        .thresh-row span { font-family:'Space Mono',monospace; font-size:12px; color:var(--accent); width:28px; text-align:right; }
+        .mira { position:fixed; top:50%; left:50%; transform:translate(-50%,-65%); width:180px; height:180px; z-index:3; pointer-events:none; transition:opacity .4s; }
+        .mira.oculta { opacity:0; }
+        .mc { position:absolute; width:24px; height:24px; border-color:var(--accent); border-style:solid; opacity:.8; }
+        .mc.tl{top:0;left:0;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+        .mc.tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+        .mc.bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+        .mc.br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+        .mira-scan { position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); animation:scan 2s ease-in-out infinite; }
+        @keyframes scan{0%{top:0;opacity:1}90%{top:100%;opacity:1}100%{top:100%;opacity:0}}
 
-        /* Nav páginas */
-        .nav-row { display:flex; gap:6px; align-items:center; }
-        .nav-btn { flex:1; padding:7px; border:1px solid var(--border); border-radius:7px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:11px; cursor:pointer; transition:all .2s; text-align:center; }
-        .nav-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
-        .nav-btn:disabled { opacity:.3; cursor:not-allowed; }
-        .pag-lbl { font-family:'Space Mono',monospace; font-size:10px; color:var(--muted); text-align:center; min-width:40px; }
+        .status-pill { display:inline-flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--border); border-radius:100px; padding:7px 14px; font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.08em; margin-bottom:14px; transition:all .3s; }
+        .status-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); transition:all .3s; }
+        .status-pill.scanning .status-dot { background:var(--accent); box-shadow:0 0 8px var(--accent); animation:pulse 1.2s infinite; }
+        .status-pill.pronto   .status-dot { background:var(--accent2); box-shadow:0 0 8px var(--accent2); }
+        .status-pill.frozen   .status-dot { background:#ffd600; box-shadow:0 0 8px #ffd600; }
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 
-        /* Info QR */
-        .info-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:'Space Mono',monospace; font-size:10px; line-height:1.8; }
-        .ok { color:var(--accent2); } .err { color:var(--danger); } .muted { color:var(--muted); }
+        .card-resultado { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:18px; margin-bottom:12px; display:none; animation:slideUp .35s cubic-bezier(.16,1,.3,1); }
+        .card-resultado.visivel { display:block; }
+        @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+        .nome-aluno { font-size:12px; font-weight:600; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px; }
+        .nota-wrap { display:flex; align-items:baseline; gap:6px; }
+        .nota-num { font-family:'Space Mono',monospace; font-size:50px; font-weight:700; line-height:1; color:var(--accent2); letter-spacing:-2px; }
+        .nota-den { font-family:'Space Mono',monospace; font-size:20px; color:var(--muted); }
+        .barra-progresso { margin-top:12px; height:4px; background:var(--border); border-radius:99px; overflow:hidden; }
+        .barra-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .6s cubic-bezier(.16,1,.3,1); }
 
-        /* Resultado */
-        .res-grande { font-family:'Space Mono',monospace; font-size:32px; font-weight:700; color:var(--accent2); }
-        .res-nome { font-size:11px; color:var(--muted); margin-top:2px; word-break:break-all; }
+        .painel { position:fixed; bottom:0; left:0; right:0; z-index:10; padding:0 16px 24px; }
+        .btn-row { display:flex; gap:10px; }
+        .btn { flex:1; height:52px; border:none; border-radius:14px; font-family:'Syne',sans-serif; font-weight:700; font-size:14px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .btn:active { transform:scale(.97); }
+        .btn-capturar { background:var(--accent); color:var(--bg); }
+        .btn-capturar:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
+        .btn-proximo { background:var(--accent2); color:var(--bg); display:none; }
 
-        /* Legenda */
-        .legenda { display:flex; flex-wrap:wrap; gap:6px; }
-        .leg { display:flex; align-items:center; gap:4px; font-size:10px; }
-        .ldot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .historico-btn { position:fixed; top:16px; right:20px; z-index:11; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:6px; transition:all .2s; }
+        .historico-btn:hover { border-color:var(--accent); color:var(--accent); }
+        .historico-count { background:var(--accent); color:var(--bg); border-radius:4px; padding:1px 6px; font-weight:700; font-size:10px; }
+        .btn-calib-abrir { position:fixed; bottom:105px; right:16px; z-index:11; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:8px 10px; font-size:18px; cursor:pointer; transition:all .2s; line-height:1; }
 
-        /* Botões */
-        .btn-primary { width:100%; padding:11px; border:none; border-radius:9px; background:var(--accent2); color:var(--bg); font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; transition:all .2s; margin-top:auto; }
-        .btn-primary:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
-        .btn-primary:not(:disabled):hover { filter:brightness(1.1); }
+        .toast { position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-10px); background:var(--accent2); color:var(--bg); padding:10px 20px; border-radius:100px; font-weight:700; font-size:13px; z-index:20; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-        /* Canvas area */
-        .canvas-area { position:relative; overflow:auto; background:#0a0a0a; display:flex; }
-        #canvas { display:block; flex-shrink:0; cursor:crosshair; }
+        .drawer { position:fixed; inset:0; z-index:30; display:none; }
+        .drawer.aberto { display:block; }
+        .drawer-bg { position:absolute; inset:0; background:rgba(8,12,16,.8); backdrop-filter:blur(4px); }
+        .drawer-panel { position:absolute; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); border-radius:24px 24px 0 0; padding:20px 20px 40px; max-height:75vh; overflow-y:auto; animation:slideUp .3s cubic-bezier(.16,1,.3,1); }
+        .drawer-handle { width:40px; height:4px; background:var(--border); border-radius:99px; margin:0 auto 20px; }
+        .drawer-titulo { font-size:18px; font-weight:800; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+        .drawer-titulo span { color:var(--muted); font-size:13px; font-weight:400; }
+        .historico-item { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border); }
+        .historico-item:last-child { border-bottom:none; }
+        .hist-nome { font-size:14px; font-weight:600; }
+        .hist-nota { font-family:'Space Mono',monospace; font-size:16px; color:var(--accent2); }
+        .hist-pct { font-size:11px; color:var(--muted); margin-top:2px; }
+        .drawer-vazio { text-align:center; padding:40px 0; color:var(--muted); font-size:14px; }
+        .btn-exportar { width:100%; margin-top:16px; height:46px; background:transparent; border:1px solid var(--border); border-radius:12px; color:var(--text); font-family:'Syne',sans-serif; font-weight:600; font-size:13px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+        .btn-exportar:hover { border-color:var(--accent2); color:var(--accent2); }
 
-        .zoom-bar { position:absolute; bottom:14px; right:14px; display:flex; gap:5px; z-index:10; }
-        .zbtn { width:32px; height:32px; border:1px solid var(--border); border-radius:7px; background:rgba(14,20,25,.9); color:var(--text); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-        .zbtn:hover { border-color:var(--accent); }
-        .zlbl { height:32px; padding:0 8px; border:1px solid var(--border); border-radius:7px; background:rgba(14,20,25,.9); color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; display:flex; align-items:center; }
-
-        /* Loading */
-        .loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(8,12,16,.8); z-index:20; font-size:14px; color:var(--muted); display:none; }
-        .loading.show { display:flex; }
+        .calib-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        .calib-row label { width:75px; text-align:right; flex-shrink:0; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
+        .calib-row input[type=range] { flex:1; accent-color:var(--accent); }
+        .calib-row .cval { width:52px; font-family:'Space Mono',monospace; font-size:11px; color:var(--accent); flex-shrink:0; }
+        .calib-secao { font-size:10px; text-transform:uppercase; color:var(--muted); letter-spacing:.1em; border-bottom:1px solid var(--border); margin:12px 0 8px; padding-bottom:4px; }
     </style>
 </head>
 <body>
 
-<aside class="sidebar">
-    <div>
-        <div class="brand">OMR<span style="color:var(--muted)">/</span>DIAG</div>
-        <h1>Diagnóstico<br><em>Visual</em></h1>
-    </div>
+<video id="video" playsinline autoplay muted></video>
+<canvas id="canvas"></canvas>
+<div class="overlay-bottom"></div>
 
-    <div>
-        <div class="sec">PDF ou Imagem</div>
-        <div class="upload-zone" id="upload-zone">
-            <input type="file" accept="application/pdf,image/*" id="file-input">
-            <div style="font-size:24px">📄</div>
-            <div class="upload-lbl" id="upload-lbl">Abrir arquivo</div>
-            <div class="upload-sub" id="upload-sub">PDF ou JPG/PNG</div>
+<div class="header">
+    <div class="logo">OMR<span>/</span>SCAN</div>
+    <div style="display:flex;gap:8px">
+        <button class="icon-btn" id="btn-flash" onclick="toggleFlash()">💡</button>
+        <button class="historico-btn" onclick="abrirDrawer()">
+            📋 <span id="hist-count-label">0</span>
+            <span class="historico-count" id="hist-badge">0</span>
+        </button>
+    </div>
+</div>
+
+<div class="mira" id="mira">
+    <div class="mc tl"></div><div class="mc tr"></div>
+    <div class="mc bl"></div><div class="mc br"></div>
+    <div class="mira-scan"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="painel">
+    <div class="status-pill scanning" id="status-pill">
+        <div class="status-dot"></div>
+        <span id="status-txt">AGUARDANDO QR CODE</span>
+    </div>
+    <div class="card-resultado" id="card-resultado">
+        <div class="nome-aluno" id="res-nome">—</div>
+        <div class="nota-wrap">
+            <div class="nota-num" id="res-acertos">—</div>
+            <div class="nota-den" id="res-total">/ —</div>
         </div>
+        <div class="barra-progresso"><div class="barra-fill" id="barra-fill" style="width:0%"></div></div>
     </div>
-
-    <div>
-        <div class="sec">Página</div>
-        <div class="nav-row">
-            <button class="nav-btn" id="btn-prev" onclick="mudarPag(-1)" disabled>◀</button>
-            <span class="pag-lbl" id="pag-lbl">— / —</span>
-            <button class="nav-btn" id="btn-next" onclick="mudarPag(+1)" disabled>▶</button>
-        </div>
+    <div class="btn-row">
+        <button class="btn btn-capturar" id="btn-capturar" onclick="capturar()" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="4"/><path d="M3 9a2 2 0 0 1 2-2h1l2-2h8l2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            CAPTURAR
+        </button>
+        <button class="btn btn-proximo" id="btn-proximo" onclick="proximo()">
+            PRÓXIMO
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
     </div>
+</div>
 
-    <div>
-        <div class="sec">QR Code</div>
-        <div class="info-box" id="qr-info"><span class="muted">Aguardando...</span></div>
+<button class="btn-calib-abrir" onclick="abrirCalib()">⚙️</button>
+
+<!-- Drawer Histórico -->
+<div class="drawer" id="drawer">
+    <div class="drawer-bg" onclick="fecharDrawer()"></div>
+    <div class="drawer-panel">
+        <div class="drawer-handle"></div>
+        <div class="drawer-titulo">Resultados <span id="drawer-resumo"></span></div>
+        <div id="drawer-lista"><div class="drawer-vazio">Nenhuma prova ainda.</div></div>
+        <button class="btn-exportar" onclick="exportarCSV()">⬇️ Exportar CSV</button>
     </div>
+</div>
 
-    <div>
-        <div class="sec">Threshold de detecção</div>
-        <div class="thresh-wrap">
-            <div style="font-size:11px;color:var(--muted)">Suba até as bolinhas marcadas ficarem <span style="color:var(--accent2)">verdes</span> e as vazias ficarem brancas.</div>
-            <div class="thresh-row">
-                <input type="range" id="sl-thresh" min="5" max="150" value="30" oninput="atualizarThresh(this.value)">
-                <span id="v-thresh">30</span>
-            </div>
-        </div>
-    </div>
-
-    <div>
-        <div class="sec">Legenda</div>
-        <div class="legenda">
-            <div class="leg"><div class="ldot" style="background:#00ff9d"></div>Certa</div>
-            <div class="leg"><div class="ldot" style="background:#ff3d5a"></div>Errada</div>
-            <div class="leg"><div class="ldot" style="background:rgba(255,255,255,.2)"></div>Vazia</div>
-            <div class="leg"><div class="ldot" style="background:#ffd600;border-radius:2px"></div>QR</div>
-        </div>
-    </div>
-
-    <div>
-        <div class="sec">Resultado</div>
-        <div class="res-grande" id="res-nota">— / —</div>
-        <div class="res-nome" id="res-nome">—</div>
-    </div>
-
-    <button class="btn-primary" id="btn-copiar" onclick="copiarThresh()" disabled>📋 Copiar threshold final</button>
-</aside>
-
-<div class="canvas-area" id="canvas-area">
-    <div class="loading" id="loading">Processando...</div>
-    <canvas id="canvas"></canvas>
-    <div class="zoom-bar">
-        <button class="zbtn" onclick="setZoom(escala-0.25)">−</button>
-        <span class="zlbl" id="zoom-lbl">100%</span>
-        <button class="zbtn" onclick="setZoom(escala+0.25)">+</button>
-        <button class="zbtn" onclick="zoomFit()">⊡</button>
+<!-- Drawer Calibração -->
+<div class="drawer" id="drawer-calib">
+    <div class="drawer-bg" onclick="fecharCalib()"></div>
+    <div class="drawer-panel">
+        <div class="drawer-handle"></div>
+        <div class="drawer-titulo">Calibração</div>
+        <div class="calib-secao">Posição Y</div>
+        <div class="calib-row"><label>Offset Y</label><input type="range" id="c_oY" min="-1" max="3" step="0.005" value="0.733" oninput="syncCalib('offsetY',this,3,'v_oY')"><span class="cval" id="v_oY">0.733</span></div>
+        <div class="calib-row"><label>Gap V</label><input type="range" id="c_gV" min="0.1" max="0.5" step="0.001" value="0.222" oninput="syncCalib('gapV',this,3,'v_gV')"><span class="cval" id="v_gV">0.222</span></div>
+        <div class="calib-secao">Detecção</div>
+        <div class="calib-row"><label>Threshold</label><input type="range" id="c_th" min="2" max="80" step="1" value="15" oninput="syncCalib('threshold',this,0,'v_th')"><span class="cval" id="v_th">15</span></div>
+        <button class="btn-exportar" onclick="copiarConfig()">📋 Copiar valores</button>
     </div>
 </div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const video       = document.getElementById('video');
+const canvas      = document.getElementById('canvas');
+const ctx         = canvas.getContext('2d', { willReadFrequently:true });
+const mira        = document.getElementById('mira');
+const statusPill  = document.getElementById('status-pill');
+const statusTxt   = document.getElementById('status-txt');
+const cardRes     = document.getElementById('card-resultado');
+const resNome     = document.getElementById('res-nome');
+const resAcertos  = document.getElementById('res-acertos');
+const resTotal    = document.getElementById('res-total');
+const barraFill   = document.getElementById('barra-fill');
+const btnCapturar = document.getElementById('btn-capturar');
+const btnProximo  = document.getElementById('btn-proximo');
 
-// ── Calibração ──
+let congelado = false, dadosAtuais = null, imgCongelada = null;
+let historico = [], torchLigada = false, videoTrack = null;
+
+// Suavização QR
+const SMOOTH_N = 6;
+let qrBuffer = [], framesSerQR = 0;
+const DEBOUNCE = 8;
+
+// ── CALIBRAÇÃO ──
+// Posições absolutas de cada coluna (A B C D E) normalizadas pelo tamanho do QR
+// Calculadas a partir de foto real — independente da distância/zoom
 const cfg = {
-    colsX:    [-1.915, -1.573, -1.154, -0.598, -0.036],
-    offsetY:   0.883,
-    gapV:      0.435,
-    threshold: 30
+    colsX:     [-1.293, -1.127, -0.785, -0.438, -0.139],
+    offsetY:    0.733,
+    gapV:       0.222,
+    threshold:  15    // contraste local (bolinha marcada vs fundo ao redor)
 };
 
-let imgAtual = null, qrAtual = null;
-let pdfDoc = null, pagAtual = 1, totalPags = 1;
-let escala = 1;
-
-const canvas = document.getElementById('canvas');
-const ctx    = canvas.getContext('2d', { willReadFrequently:true });
-
-// ── Upload ──
-document.getElementById('file-input').addEventListener('change', async e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    document.getElementById('upload-lbl').innerText = f.name;
-    document.getElementById('upload-sub').innerText = 'Carregando...';
-    if (f.type === 'application/pdf') await abrirPDF(f);
-    else await abrirImagem(f);
-});
-
-const zone = document.getElementById('canvas-area');
-zone.addEventListener('dragover', e => e.preventDefault());
-zone.addEventListener('drop', async e => {
-    e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if (!f) return;
-    if (f.type === 'application/pdf') await abrirPDF(f);
-    else await abrirImagem(f);
-});
-
-async function abrirPDF(f) {
-    const buf = await f.arrayBuffer();
-    pdfDoc    = await pdfjsLib.getDocument({ data: buf }).promise;
-    totalPags = pdfDoc.numPages;
-    pagAtual  = 1;
-    document.getElementById('pag-lbl').innerText = `${pagAtual} / ${totalPags}`;
-    document.getElementById('btn-prev').disabled = true;
-    document.getElementById('btn-next').disabled = totalPags <= 1;
-    await renderPag(pagAtual);
+function smoothQR(code) {
+    qrBuffer.push({
+        tl:{...code.location.topLeftCorner},
+        tr:{...code.location.topRightCorner},
+        bl:{...code.location.bottomLeftCorner},
+        br:{...code.location.bottomRightCorner},
+    });
+    if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
+    const n = qrBuffer.length;
+    const avg = (k,a) => qrBuffer.reduce((s,q)=>s+q[k][a],0)/n;
+    return { location:{
+        topLeftCorner:    {x:avg('tl','x'),y:avg('tl','y')},
+        topRightCorner:   {x:avg('tr','x'),y:avg('tr','y')},
+        bottomLeftCorner: {x:avg('bl','x'),y:avg('bl','y')},
+        bottomRightCorner:{x:avg('br','x'),y:avg('br','y')},
+    }, data: code.data };
 }
 
-async function abrirImagem(f) {
-    const url = URL.createObjectURL(f);
-    const img = new Image();
-    img.onload = async () => {
-        const off  = new OffscreenCanvas(img.width, img.height);
-        off.getContext('2d').drawImage(img, 0, 0);
-        imgAtual = off.getContext('2d').getImageData(0, 0, img.width, img.height);
-        URL.revokeObjectURL(url);
-        aposCarregar();
-    };
-    img.src = url;
+function setStatus(e,t) { statusPill.className='status-pill '+e; statusTxt.innerText=t; }
+function showToast(m) { const t=document.getElementById('toast'); t.innerText=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+
+async function toggleFlash() {
+    if (!videoTrack) return;
+    try {
+        torchLigada = !torchLigada;
+        await videoTrack.applyConstraints({ advanced:[{ torch:torchLigada }] });
+        document.getElementById('btn-flash').innerText = torchLigada ? '🔦' : '💡';
+        document.getElementById('btn-flash').classList.toggle('active', torchLigada);
+    } catch(e) { showToast('Flash não disponível'); torchLigada=false; }
 }
 
-async function renderPag(n) {
-    mostrarLoading(true);
-    const page = await pdfDoc.getPage(n);
-    const vp   = page.getViewport({ scale: 2.0 });
-    const off  = new OffscreenCanvas(vp.width, vp.height);
-    await page.render({ canvasContext: off.getContext('2d'), viewport: vp }).promise;
-    imgAtual = off.getContext('2d').getImageData(0, 0, vp.width, vp.height);
-    aposCarregar();
-    mostrarLoading(false);
+async function iniciarCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
+        });
+        video.srcObject = stream;
+        videoTrack = stream.getVideoTracks()[0];
+        video.onloadedmetadata = () => { video.play(); requestAnimationFrame(tick); };
+    } catch(err) { setStatus('','ERRO: '+err.name); alert('Erro câmera: '+err.message); }
+}
+iniciarCamera();
+
+let ultimoTick = 0;
+function tick(ts) {
+    if (congelado) return;
+    requestAnimationFrame(tick);
+    if (video.readyState < 2) return;
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (ts - ultimoTick < 100) return;
+    ultimoTick = ts;
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imgData.data, canvas.width, canvas.height);
+
+    if (code && code.data.includes('|GB:')) {
+        framesSerQR = 0;
+        const match = code.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+        if (match) {
+            const qrS = smoothQR(code);
+            desenharQR(qrS);
+            dadosAtuais = { code:qrS, gabarito:match[2], nome:match[1] };
+            setStatus('pronto','✅ QR DETECTADO — CAPTURE!');
+            mira.classList.add('oculta');
+            btnCapturar.disabled = false;
+        }
+    } else {
+        framesSerQR++;
+        if (framesSerQR >= DEBOUNCE && dadosAtuais) {
+            dadosAtuais = null; qrBuffer = [];
+            btnCapturar.disabled = true;
+            setStatus('scanning','AGUARDANDO QR CODE');
+            mira.classList.remove('oculta');
+            cardRes.classList.remove('visivel');
+        }
+    }
 }
 
-function aposCarregar() {
-    canvas.width  = imgAtual.width;
-    canvas.height = imgAtual.height;
-    ctx.putImageData(imgAtual, 0, 0);
-    qrAtual = jsQR(imgAtual.data, imgAtual.width, imgAtual.height);
-    atualizarQRInfo();
-    zoomFit();
-    redesenhar();
+function desenharQR(qr) {
+    const {topLeftCorner:tl,topRightCorner:tr,bottomRightCorner:br,bottomLeftCorner:bl} = qr.location;
+    ctx.strokeStyle='#ffd600'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
+    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y); ctx.closePath(); ctx.stroke();
 }
 
-function mudarPag(d) {
-    const n = pagAtual + d;
-    if (n < 1 || n > totalPags) return;
-    pagAtual = n;
-    document.getElementById('pag-lbl').innerText  = `${pagAtual} / ${totalPags}`;
-    document.getElementById('btn-prev').disabled  = pagAtual <= 1;
-    document.getElementById('btn-next').disabled  = pagAtual >= totalPags;
-    renderPag(pagAtual);
+function capturar() {
+    if (!dadosAtuais) return;
+    congelado = true;
+    btnCapturar.style.display = 'none';
+    btnProximo.style.display  = 'block';
+    setStatus('frozen','CONGELADO');
+    imgCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, imgCongelada);
 }
 
-// ── Info QR ──
-function atualizarQRInfo() {
-    const el = document.getElementById('qr-info');
-    if (!qrAtual) { el.innerHTML = '<span class="err">❌ QR não encontrado</span>'; return; }
-    const m = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-    if (!m) { el.innerHTML = `<span class="err">❌ Formato inválido</span><br><span class="muted">${qrAtual.data.slice(0,30)}</span>`; return; }
-    el.innerHTML = `<span class="ok">✓ QR lido</span><br><span class="muted">Aluno: </span>${m[1]}<br><span class="muted">Gabarito: </span>${m[2]}<br><span class="muted">Questões: </span>${m[2].length}`;
+function proximo() {
+    congelado=false; dadosAtuais=null; imgCongelada=null; qrBuffer=[]; framesSerQR=0;
+    btnCapturar.style.display='block'; btnCapturar.disabled=true;
+    btnProximo.style.display='none';
+    cardRes.classList.remove('visivel');
+    mira.classList.remove('oculta');
+    setStatus('scanning','AGUARDANDO QR CODE');
+    requestAnimationFrame(tick);
 }
 
-// ── Threshold ──
-function atualizarThresh(v) {
-    cfg.threshold = parseInt(v);
-    document.getElementById('v-thresh').innerText = v;
-    if (imgAtual) redesenhar();
-}
-
-// ── Redesenha ──
-function redesenhar() {
-    if (!imgAtual) return;
-    ctx.putImageData(imgAtual, 0, 0);
-    if (!qrAtual) return;
-
-    const m = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-    if (!m) return;
-    const gabarito = m[2], nome = m[1];
-
-    const tl = qrAtual.location.topLeftCorner,    tr = qrAtual.location.topRightCorner;
-    const bl = qrAtual.location.bottomLeftCorner, br = qrAtual.location.bottomRightCorner;
+// ── PROCESSAR com contraste local ──
+function processar(qr, gabarito, nome, pixelData) {
+    const tl = qr.location.topLeftCorner,    tr = qr.location.topRightCorner;
+    const bl = qr.location.bottomLeftCorner, br = qr.location.bottomRightCorner;
     const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
     const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
     const size = (qrW + qrH) / 2;
-    const cx   = (tl.x + br.x) / 2, cy = (tl.y + br.y) / 2;
+    const cx   = (tl.x+br.x)/2, cy = (tl.y+br.y)/2;
     const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
     const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
 
-    // QR border
-    ctx.strokeStyle = '#ffd600'; ctx.lineWidth = Math.max(2, size*0.02);
-    ctx.beginPath();
-    ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
-    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
-    ctx.closePath(); ctx.stroke();
+    const d = pixelData.data, W = pixelData.width, H = pixelData.height;
+    // Raio de amostragem: ~5% do QR para centro, ~15% para anel externo
+    const Ri = Math.max(4, Math.round(size * 0.05));   // raio centro
+    const Ro = Math.max(12, Math.round(size * 0.15));  // raio externo
 
-    const d = imgAtual.data, W = imgAtual.width, H = imgAtual.height;
-    const R  = Math.max(8, Math.round(size * 0.055));
-    const AM = Math.max(3, Math.round(R * 0.5));
+    // Desenha QR border
+    desenharQR(qr);
+
     let acertos = 0;
+
+    function sampleBrightness(cx, cy, r) {
+        let sum=0, cnt=0;
+        for (let dx=-r;dx<=r;dx+=2) for (let dy=-r;dy<=r;dy+=2) {
+            if (dx*dx+dy*dy > r*r) continue;
+            const px=Math.min(Math.max(Math.floor(cx+dx),0),W-1);
+            const py=Math.min(Math.max(Math.floor(cy+dy),0),H-1);
+            const idx=(py*W+px)*4;
+            sum += (d[idx]+d[idx+1]+d[idx+2])/3;
+            cnt++;
+        }
+        return cnt > 0 ? sum/cnt : 128;
+    }
 
     for (let i = 0; i < gabarito.length; i++) {
         const lin = i % 30;
         const ny  = cfg.offsetY + lin * cfg.gapV;
-        let marcada = -1, maxEsc = 0;
+        let marcada = -1, maxContraste = 0;
 
-        // Detecta marcada
         for (let alt = 0; alt < 5; alt++) {
             const nx = cfg.colsX[alt];
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
             if (x<0||x>=W||y<0||y>=H) continue;
-            let esc=0, cnt=0;
-            for (let dx=-AM;dx<=AM;dx++) for (let dy=-AM;dy<=AM;dy++) {
-                const px=Math.min(Math.max(Math.floor(x+dx),0),W-1);
-                const py=Math.min(Math.max(Math.floor(y+dy),0),H-1);
-                const idx=(py*W+px)*4;
-                esc += 255-((d[idx]+d[idx+1]+d[idx+2])/3);
-                cnt++;
+
+            // Contraste local: fundo - centro (positivo = centro mais escuro = marcado)
+            const inner = sampleBrightness(x, y, Ri);
+            const outer = sampleBrightness(x, y, Ro);
+            const contraste = outer - inner;
+
+            if (contraste > cfg.threshold && contraste > maxContraste) {
+                maxContraste = contraste; marcada = alt;
             }
-            esc/=cnt;
-            if (esc > cfg.threshold && esc > maxEsc) { maxEsc=esc; marcada=alt; }
         }
 
-        // Desenha todas as bolinhas
+        const R = Math.max(8, Math.round(size * 0.055));
         for (let alt = 0; alt < 5; alt++) {
             const nx = cfg.colsX[alt];
             const x  = cx + nx*size*ux + ny*size*vx;
@@ -321,67 +377,74 @@ function redesenhar() {
             const correta = String.fromCharCode(65+alt) === gabarito[i];
             const marcadaEsta = alt === marcada;
 
-            ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2);
+            ctx.beginPath(); ctx.arc(x,y,R,0,Math.PI*2);
             ctx.fillStyle = marcadaEsta
-                ? (correta ? 'rgba(0,255,157,.85)' : 'rgba(255,61,90,.85)')
-                : 'rgba(255,255,255,.18)';
+                ? (correta ? 'rgba(0,255,157,.88)' : 'rgba(255,61,90,.88)')
+                : 'rgba(255,255,255,.2)';
             ctx.fill();
-            ctx.strokeStyle = marcadaEsta ? (correta?'#00ff9d':'#ff3d5a') : 'rgba(255,255,255,.2)';
-            ctx.lineWidth = 1.5; ctx.stroke();
-
-            ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,.55)';
-            ctx.font = `bold ${Math.max(8, Math.round(R*.8))}px monospace`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(String.fromCharCode(65+alt), x, y);
+            ctx.strokeStyle = marcadaEsta?(correta?'#00ff9d':'#ff3d5a'):'rgba(255,255,255,.25)';
+            ctx.lineWidth=1.5; ctx.stroke();
+            ctx.fillStyle = marcadaEsta?'#080c10':'rgba(255,255,255,.55)';
+            ctx.font=`bold ${Math.max(8,Math.round(R*.85))}px monospace`;
+            ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(String.fromCharCode(65+alt),x,y);
         }
-
-        // Número da questão
-        const nx0 = cfg.colsX[0] - 0.35;
-        const xn = cx + nx0*size*ux + ny*size*vx;
-        const yn = cy + nx0*size*uy + ny*size*vy;
-        ctx.fillStyle = 'rgba(0,229,255,.7)';
-        ctx.font = `bold ${Math.max(7, Math.round(R*.65))}px monospace`;
-        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        ctx.fillText(String(i+1).padStart(2,'0'), xn, yn);
-
-        if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
+        if (marcada!==-1 && String.fromCharCode(65+marcada)===gabarito[i]) acertos++;
     }
 
-    document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
-    document.getElementById('res-nome').innerText = nome;
-    document.getElementById('btn-copiar').disabled = false;
-    aplicarZoom();
+    const total=gabarito.length, pct=Math.round((acertos/total)*100);
+    resNome.innerText=nome; resAcertos.innerText=acertos;
+    resTotal.innerText=`/ ${total}`; barraFill.style.width=pct+'%';
+    cardRes.classList.add('visivel');
+    const idx=historico.findIndex(h=>h.nome===nome);
+    const ent={nome,acertos,total,pct};
+    if (idx>=0) historico[idx]=ent; else historico.push(ent);
+    atualizarBadge();
 }
 
-// ── Zoom ──
-function setZoom(z) {
-    escala = Math.max(0.1, Math.min(4, z));
-    canvas.style.transform = `scale(${escala})`;
-    canvas.style.transformOrigin = 'top left';
-    canvas.style.margin = '16px';
-    document.getElementById('zoom-lbl').innerText = Math.round(escala*100)+'%';
+function syncCalib(key,input,dec,spanId) {
+    cfg[key]=parseFloat(input.value);
+    document.getElementById(spanId).innerText=cfg[key].toFixed(dec);
+    if (congelado && dadosAtuais && imgCongelada) {
+        ctx.putImageData(imgCongelada,0,0);
+        processar(dadosAtuais.code,dadosAtuais.gabarito,dadosAtuais.nome,imgCongelada);
+    }
 }
-function zoomFit() {
-    const a = document.getElementById('canvas-area');
-    setZoom(Math.min((a.clientWidth-32)/canvas.width, (a.clientHeight-32)/canvas.height, 1));
-}
-function aplicarZoom() {
-    canvas.style.transform = `scale(${escala})`;
-    canvas.style.transformOrigin = 'top left';
-    canvas.style.margin = '16px';
+function abrirCalib()  { document.getElementById('drawer-calib').classList.add('aberto'); }
+function fecharCalib() { document.getElementById('drawer-calib').classList.remove('aberto'); }
+function copiarConfig() {
+    const t=`offsetY:${cfg.offsetY.toFixed(3)}, gapV:${cfg.gapV.toFixed(3)}, threshold:${cfg.threshold}`;
+    navigator.clipboard.writeText(t).catch(()=>{});
+    showToast('Copiado!');
 }
 
-// ── Loading ──
-function mostrarLoading(s) { document.getElementById('loading').classList.toggle('show', s); }
-
-// ── Copiar threshold ──
-function copiarThresh() {
-    const txt = `threshold: ${cfg.threshold}`;
-    navigator.clipboard.writeText(txt).then(() => {
-        const b = document.getElementById('btn-copiar');
-        b.innerText = '✅ Copiado!';
-        setTimeout(() => b.innerText = '📋 Copiar threshold final', 2000);
-    });
+function atualizarBadge() {
+    document.getElementById('hist-badge').innerText=historico.length;
+    document.getElementById('hist-count-label').innerText=historico.length;
+}
+function abrirDrawer() {
+    const lista=document.getElementById('drawer-lista'), resumo=document.getElementById('drawer-resumo');
+    if (!historico.length) { lista.innerHTML='<div class="drawer-vazio">Nenhuma prova ainda.</div>'; resumo.innerText=''; }
+    else {
+        const media=Math.round(historico.reduce((s,h)=>s+h.pct,0)/historico.length);
+        resumo.innerText=`média ${media}%`;
+        lista.innerHTML=historico.slice().sort((a,b)=>b.acertos-a.acertos).map(h=>`
+            <div class="historico-item">
+                <div><div class="hist-nome">${h.nome}</div><div class="hist-pct">${h.pct}%</div></div>
+                <div class="hist-nota">${h.acertos}<span style="color:var(--muted);font-size:12px">/${h.total}</span></div>
+            </div>`).join('');
+    }
+    document.getElementById('drawer').classList.add('aberto');
+}
+function fecharDrawer() { document.getElementById('drawer').classList.remove('aberto'); }
+function exportarCSV() {
+    if (!historico.length) { showToast('Nenhum resultado ainda'); return; }
+    const l=['Nome,Acertos,Total,Porcentagem'];
+    historico.forEach(h=>l.push(`"${h.nome}",${h.acertos},${h.total},${h.pct}%`));
+    const url=URL.createObjectURL(new Blob([l.join('\n')],{type:'text/csv;charset=utf-8;'}));
+    Object.assign(document.createElement('a'),{href:url,download:'resultados_omr.csv'}).click();
+    URL.revokeObjectURL(url);
+    showToast('CSV exportado!');
 }
 </script>
 </body>
