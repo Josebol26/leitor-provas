@@ -3,121 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OMR Pro 2026 - Scanner Sensível</title>
+    <title>OMR Pro - Versão Estável</title>
     
-    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true; console.log('OpenCV Pronto');}"></script>
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true;}"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
     <style>
-        :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --accent: #3b82f6;
-            --success: #22c55e;
-            --danger: #ef4444;
-        }
-
-        body { 
-            background: var(--bg); 
-            color: #f1f5f9; 
-            font-family: 'Segoe UI', sans-serif; 
-            margin: 0; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-        }
-
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --success: #22c55e; }
+        body { background: var(--bg); color: #f1f5f9; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        
         #video-container { 
-            position: relative; 
-            width: 100vw; 
-            height: 55vh; 
-            background: #000;
-            border-bottom: 2px solid #334155;
+            position: relative; width: 100vw; height: 55vh; background: #000; overflow: hidden;
+            border-bottom: 3px solid var(--accent);
         }
-
         video { width: 100%; height: 100%; object-fit: cover; }
 
-        .overlay-aim {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 250px; height: 250px;
-            border: 2px solid rgba(59, 130, 246, 0.5);
-            transform: translate(-50%, -50%);
-            border-radius: 20px;
-            pointer-events: none;
+        /* Linha de Varredura que você gostou */
+        .scan-line {
+            position: absolute; width: 100%; height: 3px;
+            background: var(--accent);
+            box-shadow: 0 0 15px var(--accent);
+            top: 50%;
+            animation: scan 2.5s infinite ease-in-out;
+            z-index: 10;
         }
+        @keyframes scan { 0% { top: 10%; } 50% { top: 90%; } 100% { top: 10%; } }
 
-        .ui-panel { 
-            padding: 15px; 
-            width: 90%; 
-            max-width: 500px; 
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
+        .ui-panel { padding: 15px; width: 90%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
         #status-card { 
-            padding: 15px; 
-            border-radius: 12px; 
-            background: var(--card); 
-            border: 2px solid #334155; 
-            text-align: center;
-            min-height: 100px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+            padding: 20px; border-radius: 15px; background: var(--card); border: 2px solid #334155; 
+            text-align: center; min-height: 120px; transition: 0.3s;
         }
-
         .is-success { border-color: var(--success) !important; background: #064e3b !important; }
-
+        
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
         button { 
-            background: #334155; 
-            color: white; 
-            border: none; 
-            padding: 12px; 
-            border-radius: 10px; 
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+            background: #334155; color: white; border: none; padding: 14px; 
+            border-radius: 10px; font-weight: bold; cursor: pointer;
         }
-
-        .btn-torch { background: #475569; }
-        .btn-reload { background: #1e293b; border: 1px solid #334155; }
-
-        .debug-info {
-            font-family: monospace;
-            font-size: 11px;
-            color: #94a3b8;
-            margin-top: 5px;
-            background: rgba(0,0,0,0.3);
-            padding: 5px;
-            border-radius: 5px;
-        }
+        .btn-torch { background: #3b82f6; }
+        .info-small { font-family: monospace; font-size: 11px; color: #94a3b8; margin-top: 8px; }
     </style>
 </head>
 <body>
 
 <div id="video-container">
     <video id="video" playsinline></video>
-    <div class="overlay-aim"></div>
+    <div class="scan-line"></div>
 </div>
 
 <div class="ui-panel">
     <div id="status-card">
-        <div id="msg">Aguardando QR Code...</div>
+        <div id="msg" style="font-size: 1.2em;">Posicione o QR Code</div>
     </div>
 
     <div class="controls">
         <button class="btn-torch" onclick="alternarLanterna()">🔦 LANTERNA</button>
-        <button class="btn-reload" onclick="location.reload()">🔄 RESET</button>
-    </div>
-    <div style="font-size: 10px; color: #64748b; text-align: center;">
-        Toque na tela após a leitura para escanear o próximo aluno.
+        <button onclick="location.reload()">🔄 REINICIAR</button>
     </div>
 </div>
 
@@ -133,7 +75,7 @@
     let lanternaAtiva = false;
 
     navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+        video: { facingMode: "environment", width: { ideal: 1280 } } 
     }).then(stream => { 
         video.srcObject = stream; 
         video.play(); 
@@ -145,7 +87,7 @@
         try {
             lanternaAtiva = !lanternaAtiva;
             await track.applyConstraints({ advanced: [{ torch: lanternaAtiva }] });
-        } catch (e) { alert("Lanterna não disponível"); }
+        } catch (e) { alert("Lanterna não suportada"); }
     }
 
     function tick() {
@@ -172,22 +114,15 @@
             let src = cv.imread(canvas);
             let gray = new cv.Mat();
             let thresh = new cv.Mat();
-            
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-            // FILTROS DE LUMINOSIDADE E SENSIBILIDADE
-            cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0); 
-            // Adaptive Threshold mais sensível (bloco 11, constante 2)
-            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-
-            // DILATAÇÃO: Engrossa a marcação da caneta
-            let M = cv.Mat.ones(3, 3, cv.CV_8U);
-            cv.dilate(thresh, thresh, M);
+            // Filtro de nitidez para evitar os erros de leitura que você teve
+            cv.threshold(gray, thresh, 120, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
             const loc = qr.location;
             const d_qr = Math.sqrt(Math.pow(loc.topLeftCorner.x - loc.topRightCorner.x, 2) + Math.pow(loc.topLeftCorner.y - loc.topRightCorner.y, 2));
 
-            // Calibragem Geométrica (Sistema José Luiz)
+            // Coordenadas estáveis (Calibragem José Luiz)
             let start_x = loc.topLeftCorner.x - (d_qr * 1.74);
             let start_y = loc.topLeftCorner.y + (d_qr * 2.05);
             let esp_lin = d_qr * 0.340;
@@ -195,15 +130,14 @@
             let raio = Math.round(d_qr * 0.16);
 
             let partes = qr.data.split('|');
-            let nome = "Aluno";
-            let gabarito = "";
+            let nome = "Aluno"; let gabarito = "";
             partes.forEach(p => {
                 if(p.startsWith("AL:")) nome = p.replace("AL:", "").trim();
                 if(p.startsWith("GB:")) gabarito = p.replace("GB:", "").trim();
             });
 
             let acertos = 0;
-            let detectado = "";
+            let lido = "";
             const alts = ['A', 'B', 'C', 'D', 'E'];
 
             for (let q = 0; q < 15; q++) {
@@ -218,44 +152,42 @@
                     if (rx > 0 && ry > 0 && (rx + raio*2) < thresh.cols && (ry + raio*2) < thresh.rows) {
                         let rect = new cv.Rect(rx, ry, raio*2, raio*2);
                         let roi = thresh.roi(rect);
-                        let count = cv.countNonZero(roi); 
+                        let count = cv.countNonZero(roi);
                         if (count > max_v) { max_v = count; sel = a; }
                         roi.delete();
                     }
                 }
 
-                // LIMITE DE SENSIBILIDADE (0.6): Detecta até marcações parciais
-                if (max_v > (raio * raio * 0.6)) { 
-                    detectado += alts[sel];
+                // SUBIMOS O RIGOR: Agora exige 80% da área (ajustado para ser certeiro)
+                if (max_v > (raio * raio * 0.8)) { 
+                    lido += alts[sel];
                     if (gabarito && q < gabarito.length && alts[sel] === gabarito[q].toUpperCase()) {
                         acertos++;
                     }
                 } else {
-                    detectado += "_";
+                    lido += "_";
                 }
             }
 
             statusCard.classList.add('is-success');
             statusCard.innerHTML = `
-                <div style="font-size:18px; font-weight:bold;">${nome}</div>
-                <div style="font-size:32px; color:var(--success);">${acertos}/15</div>
-                <div class="debug-info">Lido: ${detectado}</div>
-                <div class="debug-info">Gabarito: ${gabarito}</div>
+                <div style="font-weight:bold; font-size:20px;">${nome}</div>
+                <div style="font-size:35px; margin:10px 0;">${acertos}/15</div>
+                <div class="info-small">Lido: ${lido}</div>
+                <div style="font-size:11px; color:#fff; margin-top:10px;">TOQUE PARA PRÓXIMO</div>
             `;
 
-            src.delete(); gray.delete(); thresh.delete(); M.delete();
+            src.delete(); gray.delete(); thresh.delete();
         } catch (e) {
-            console.error(e);
             processando = false;
         }
     }
 
-    // Resetar para próxima leitura ao tocar no card ou vídeo
     window.onclick = () => { 
         if(processando) {
             processando = false; 
             statusCard.classList.remove('is-success');
-            statusCard.innerHTML = '<div id="msg">Aguardando QR Code...</div>';
+            statusCard.innerHTML = '<div style="font-size: 1.2em;">Posicione o QR Code</div>';
         }
     };
 </script>
