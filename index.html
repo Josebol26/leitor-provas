@@ -127,7 +127,8 @@
         <div class="slider-row"><label>Gap H</label>   <input type="range" id="s_gH" min="0.1" max="1.0" step="0.001" value="0.611" oninput="upd('gapH',this,3,'v_gH')"><span class="val" id="v_gH">0.611</span></div>
         <div class="slider-row"><label>Gap V</label>   <input type="range" id="s_gV" min="0.1" max="0.8" step="0.001" value="0.335" oninput="upd('gapV',this,3,'v_gV')"><span class="val" id="v_gV">0.335</span></div>
         <div class="slider-row"><label>Col Gap</label> <input type="range" id="s_cG" min="0.5" max="3.0" step="0.005" value="1.680" oninput="upd('colGap',this,3,'v_cG')"><span class="val" id="v_cG">1.680</span></div>
-        <div class="sec" style="margin-top:4px">Detecção</div>
+        <div class="sec" style="margin-top:4px">Visual</div>
+        <div class="slider-row"><label>Tamanho</label><input type="range" id="s_rb" min="3" max="40" step="1" value="12" oninput="upd('raio',this,0,'v_rb')"><span class="val" id="v_rb">12</span></div>
         <div class="slider-row"><label>Threshold</label><input type="range" id="s_th" min="30" max="250" step="1" value="81" oninput="upd('threshold',this,0,'v_th')"><span class="val" id="v_th">81</span></div>
     </div>
 
@@ -153,7 +154,8 @@
 
     <!-- Ações -->
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
-        <div id="diag" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-height:14px;line-height:1.4;"></div>
+        <div id="diag" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-height:14px;line-height:1.6;"></div>
+        <button class="btn-secondary" style="font-size:11px;padding:8px" onclick="autoRaio()">🔍 Auto-tamanho bolinhas</button>
         <button class="btn-primary" id="btn-redesenhar" onclick="redesenhar()" disabled>↺ REDESENHAR</button>
         <button class="btn-secondary" id="btn-copiar" onclick="copiarConfig()">📋 Copiar valores finais</button>
     </div>
@@ -175,7 +177,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── Estado ──
-const cfg = { offsetX:-2.175, offsetY:1.560, gapH:0.611, gapV:0.335, colGap:1.680, threshold:81 };
+const cfg = { offsetX:-2.175, offsetY:1.560, gapH:0.611, gapV:0.335, colGap:1.680, threshold:81, raio:12 };
 let pdfDoc    = null;
 let pagAtual  = 1;
 let totalPags = 0;
@@ -300,8 +302,8 @@ function redesenhar() {
 
     const d = imgAtual.data, W = imgAtual.width, H = imgAtual.height;
     let acertos = 0, puladas = 0;
-    const R  = Math.max(6, Math.round(size * 0.055)); // raio proporcional ao QR
-    const AM = Math.max(2, Math.round(R * 0.5));      // raio de amostragem
+    const R  = cfg.raio;               // raio visual — controlado pelo slider
+    const AM = Math.max(2, Math.round(R * 0.5)); // raio de amostragem de pixels
 
     for (let i = 0; i < gabarito.length; i++) {
         const col = Math.floor(i/30), lin = i%30;
@@ -379,17 +381,31 @@ function redesenhar() {
     document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
     document.getElementById('res-nome').innerText = nome;
 
-    // Mostra diagnóstico se alguma bolinha foi pulada
     const diagEl = document.getElementById('diag');
+    const info = `Imagem: ${W}×${H}px | QR: ${Math.round(size)}px | Raio: ${R}px`;
     if (puladas > 0) {
-        diagEl.innerText = `⚠️ ${puladas} bolinha(s) fora da imagem — ajuste Offset X/Y`;
-        diagEl.style.color = '#ffd600';
+        diagEl.innerHTML = `${info}<br><span style="color:#ffd600">⚠️ ${puladas} bolinhas fora — ajuste Offset</span>`;
     } else {
-        diagEl.innerText = `✓ Todas as ${gabarito.length * 5} bolinhas dentro da imagem`;
-        diagEl.style.color = 'var(--accent2)';
+        diagEl.innerHTML = `${info}<br><span style="color:var(--accent2)">✓ Todas as ${gabarito.length*5} bolinhas visíveis</span>`;
     }
 
     aplicarZoom();
+}
+
+// ── Auto-tamanho baseado no QR detectado ──
+function autoRaio() {
+    if (!qrAtual || !imgAtual) return;
+    const tl = qrAtual.location.topLeftCorner, tr = qrAtual.location.topRightCorner;
+    const bl = qrAtual.location.bottomLeftCorner;
+    const qrW = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+    const qrH = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+    const size = (qrW + qrH) / 2;
+    // Raio ideal: ~5.5% do tamanho do QR
+    const raioIdeal = Math.max(5, Math.min(40, Math.round(size * 0.055)));
+    cfg.raio = raioIdeal;
+    document.getElementById('s_rb').value = raioIdeal;
+    document.getElementById('v_rb').innerText = raioIdeal;
+    redesenhar();
 }
 
 // ── Zoom ──
