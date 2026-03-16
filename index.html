@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OMR Pro - Scanner com Conferência</title>
+    <title>OMR Pro - Fluxo Corrigido</title>
     
     <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true;}"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --success: #22c55e; }
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --success: #22c55e; --danger: #ef4444; }
         body { background: var(--bg); color: #f1f5f9; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
         
         #video-container { position: relative; width: 100vw; height: 50vh; background: #000; border-bottom: 3px solid var(--accent); overflow: hidden; }
@@ -18,11 +18,14 @@
         @keyframes scan { 0% { top: 10%; } 100% { top: 90%; } }
 
         .ui-panel { padding: 15px; width: 90%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
-        #status-card { padding: 15px; border-radius: 12px; background: var(--card); border: 2px solid #334155; text-align: center; min-height: 140px; }
+        #status-card { padding: 15px; border-radius: 12px; background: var(--card); border: 2px solid #334155; text-align: center; min-height: 140px; cursor: pointer; }
         .is-success { border-color: var(--success) !important; background: #064e3b !important; }
         
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         button { background: #334155; color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        
+        /* Botão Descartar Leitura Errada */
+        .btn-discard { background: var(--danger); }
         .btn-report { background: var(--accent); grid-column: span 2; }
         
         .debug-lido { font-family: monospace; font-size: 11px; color: #94a3b8; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px; margin-top: 10px; word-break: break-all; }
@@ -42,20 +45,20 @@
 
 <div class="ui-panel">
     <div id="status-card" onclick="salvarResultado()">
-        <div id="msg">Aguardando Prova...</div>
+        <div id="msg">Aguardando Leitura...</div>
     </div>
 
     <div class="controls">
         <button onclick="alternarLanterna()">🔦 LANTERNA</button>
-        <button onclick="location.reload()">🔄 LIMPAR</button>
-        <button class="btn-report" onclick="mostrarRelatorio()">📊 RELATÓRIO FINAL</button>
+        <button class="btn-discard" onclick="descartarLeitura()">❌ DESCARTAR</button>
+        <button class="btn-report" onclick="mostrarRelatorio()">📊 RELATÓRIO FINAL (<span id="count-salvos">0</span>)</button>
     </div>
 </div>
 
 <div id="modal-relatorio">
     <h2>Resultados Salvos</h2>
     <div id="tabela-container"></div>
-    <button onclick="fecharRelatorio()" style="margin-top:20px; width:100%; background: var(--accent);">VOLTAR</button>
+    <button onclick="fecharRelatorio()" style="margin-top:20px; width:100%; background: var(--accent);">VOLTAR AO SCANNER</button>
 </div>
 
 <canvas id="canvas" style="display:none;"></canvas>
@@ -64,11 +67,12 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const statusCard = document.getElementById('status-card');
+    const countSpan = document.getElementById('count-salvos');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     let processando = false;
     let lanternaAtiva = false;
-    let bancoDeDados = [];
+    let bancoDeDados = []; // Seus dados salvos ficam aqui
     let resultadoAtual = null;
 
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => { 
@@ -139,32 +143,43 @@
 
             statusCard.classList.add('is-success');
             statusCard.innerHTML = `
-                <div style="font-weight:bold; font-size:1.1em;">${nome}</div>
+                <div style="font-weight:bold;">${nome}</div>
                 <div style="font-size:2.2em; margin:5px 0;">${acertos}/15</div>
                 <div class="debug-lido">LIDO: ${lidoString}</div>
-                <div style="margin-top:10px; font-size:12px; background:#22c55e; padding:5px; border-radius:5px;">TOQUE PARA SALVAR</div>
+                <div style="margin-top:10px; font-size:12px; background:var(--success); color:white; padding:5px; border-radius:5px;">TOQUE PARA CONFIRMAR</div>
             `;
 
             src.delete(); gray.delete(); thresh.delete();
         } catch (e) { processando = false; }
     }
 
+    // Função que salva no banco
     function salvarResultado() {
         if (resultadoAtual) {
             bancoDeDados.push(resultadoAtual);
             resultadoAtual = null;
             processando = false;
+            countSpan.innerText = bancoDeDados.length;
             statusCard.classList.remove('is-success');
-            statusCard.innerHTML = '<div id="msg">Salvo! Próxima Prova...</div>';
-            setTimeout(() => { if(!processando) statusCard.innerHTML = '<div id="msg">Aguardando Prova...</div>'; }, 1200);
+            statusCard.innerHTML = '<div>✅ Salvo com sucesso!</div>';
+            setTimeout(() => { if(!processando) statusCard.innerHTML = '<div>Aguardando Leitura...</div>'; }, 1000);
         }
+    }
+
+    // Função que apenas limpa a tela para ler de novo (SEM APAGAR O BANCO)
+    function descartarLeitura() {
+        resultadoAtual = null;
+        processando = false;
+        statusCard.classList.remove('is-success');
+        statusCard.innerHTML = '<div>❌ Leitura descartada. Tente novamente.</div>';
+        setTimeout(() => { if(!processando) statusCard.innerHTML = '<div>Aguardando Leitura...</div>'; }, 1000);
     }
 
     function mostrarRelatorio() {
         const modal = document.getElementById('modal-relatorio');
         const container = document.getElementById('tabela-container');
         if (bancoDeDados.length === 0) {
-            container.innerHTML = "<p>Nenhum dado salvo.</p>";
+            container.innerHTML = "<p>Nenhum resultado salvo nesta sessão.</p>";
         } else {
             let html = "<table><tr><th>Aluno</th><th>Nota</th><th>Respostas</th></tr>";
             bancoDeDados.forEach(item => {
