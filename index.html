@@ -140,10 +140,13 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// Calibração: offsets absolutos por coluna (A B C D E) — não assume gapH uniforme
 const cfg = {
-    offsetX: -1.820, offsetY: 0.880,
-    gapH: 0.498,     gapV: 0.435,
-    colGap: 1.680,   threshold: 80
+    colsX:    [-1.915, -1.573, -1.154, -0.598, -0.036], // offset normalizado de cada coluna
+    offsetY:   0.883,
+    gapV:      0.435,
+    colGap:    1.680,
+    threshold: 30   // baixo para fotos Google Drive (imagem mais clara)
 };
 
 let pdfFile = null;
@@ -200,17 +203,16 @@ function lerBolinhas(qr, imgData) {
     const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
 
     const d = imgData.data, W = imgData.width, H = imgData.height;
-    const AM = Math.max(2, Math.round(size * 0.03));
+    const AM = Math.max(3, Math.round(size * 0.04));
     let acertos = 0;
 
     for (let i = 0; i < gabarito.length; i++) {
         const col = Math.floor(i/30), lin = i%30;
-        const bx  = cfg.offsetX + col*cfg.colGap;
-        const by  = cfg.offsetY + lin*cfg.gapV;
+        const ny  = cfg.offsetY + lin*cfg.gapV + col*0; // colGap não usado aqui
         let marcada = -1, maxEsc = 0;
 
         for (let alt = 0; alt < 5; alt++) {
-            const nx = bx + alt*cfg.gapH, ny = by;
+            const nx = cfg.colsX[alt];
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
             if (x < 0 || x >= W || y < 0 || y >= H) continue;
