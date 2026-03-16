@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OMR Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="https://docs.opencv.org/4.8.0/opencv.js" async id="opencvScript"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -19,442 +18,172 @@
             --muted: #4a6070;
             --card: #111922;
         }
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Syne', sans-serif; background: #000; color: var(--text); overflow: hidden; height: 100vh; width: 100vw; }
 
-        body {
-            font-family: 'Syne', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
-        }
-
-        /* ── CÂMERA ── */
+        /* Vídeo ocupa tela toda como base */
         #video {
             position: fixed; inset: 0;
             width: 100%; height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             z-index: 0;
-            /* NÃO esconde o video — canvas precisa que ele esteja visível para drawImage funcionar em alguns browsers */
         }
+        /* Canvas sobreposto, mesmo tamanho CSS que o video */
         #canvas {
             position: fixed; inset: 0;
             width: 100%; height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             z-index: 1;
         }
 
-        /* ── OVERLAY GRADIENTE ── */
         .overlay-bottom {
-            position: fixed; bottom: 0; left: 0; right: 0;
-            height: 40%;
-            background: linear-gradient(to top, rgba(8,12,16,0.90) 25%, transparent);
-            z-index: 2;
-            pointer-events: none;
+            position: fixed; bottom: 0; left: 0; right: 0; height: 45%;
+            background: linear-gradient(to top, rgba(8,12,16,0.93) 30%, transparent);
+            z-index: 2; pointer-events: none;
         }
 
-        /* ── HEADER ── */
         .header {
-            position: fixed; top: 0; left: 0; right: 0;
-            z-index: 10;
+            position: fixed; top: 0; left: 0; right: 0; z-index: 10;
             display: flex; align-items: center; justify-content: space-between;
             padding: 18px 20px 12px;
             background: linear-gradient(to bottom, rgba(8,12,16,0.95), transparent);
         }
-        .logo {
-            font-family: 'Space Mono', monospace;
-            font-size: 13px;
-            letter-spacing: 0.15em;
-            color: var(--accent);
-            text-transform: uppercase;
-        }
+        .logo { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; }
         .logo span { color: var(--muted); }
 
-        /* ── MIRA ── */
+        /* Mira central */
         .mira {
-            position: fixed;
-            top: 50%; left: 50%;
+            position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -65%);
             width: 200px; height: 200px;
-            z-index: 3;
-            pointer-events: none;
-            transition: opacity 0.3s;
+            z-index: 3; pointer-events: none; transition: opacity 0.3s;
         }
         .mira.oculta { opacity: 0; }
-        .mira-corner {
-            position: absolute;
-            width: 28px; height: 28px;
-            border-color: var(--accent);
-            border-style: solid;
-            opacity: 0.9;
-        }
-        .mira-corner.tl { top: 0; left: 0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
-        .mira-corner.tr { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
-        .mira-corner.bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
-        .mira-corner.br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+        .mira-corner { position: absolute; width: 28px; height: 28px; border-color: var(--accent); border-style: solid; opacity: 0.9; }
+        .mira-corner.tl { top:0; left:0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+        .mira-corner.tr { top:0; right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+        .mira-corner.bl { bottom:0; left:0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+        .mira-corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+        .mira-scan { position: absolute; top:0; left:0; right:0; height:2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan 2s ease-in-out infinite; }
+        @keyframes scan { 0%{top:0;opacity:1} 90%{top:100%;opacity:1} 100%{top:100%;opacity:0} }
 
-        .mira-scan {
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-            animation: scan 2s ease-in-out infinite;
-        }
-        @keyframes scan {
-            0% { top: 0; opacity: 1; }
-            90% { top: 100%; opacity: 1; }
-            100% { top: 100%; opacity: 0; }
-        }
+        /* Painel inferior */
+        .painel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; padding: 0 16px 24px; }
 
-        /* ── PAINEL PRINCIPAL ── */
-        .painel {
-            position: fixed; bottom: 0; left: 0; right: 0;
-            z-index: 10;
-            padding: 0 16px 24px;
-        }
-
-        /* ── STATUS PILL ── */
         .status-pill {
             display: inline-flex; align-items: center; gap: 8px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 100px;
-            padding: 7px 14px;
-            font-family: 'Space Mono', monospace;
-            font-size: 11px;
-            letter-spacing: 0.08em;
-            margin-bottom: 16px;
-            transition: all 0.3s;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 100px; padding: 7px 14px;
+            font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.08em;
+            margin-bottom: 16px; transition: all 0.3s;
         }
-        .status-dot {
-            width: 7px; height: 7px;
-            border-radius: 50%;
-            background: var(--muted);
-            transition: all 0.3s;
-        }
-        .status-pill.scanning .status-dot {
-            background: var(--accent);
-            box-shadow: 0 0 8px var(--accent);
-            animation: pulse 1.2s ease-in-out infinite;
-        }
-        .status-pill.ready .status-dot {
-            background: var(--accent2);
-            box-shadow: 0 0 8px var(--accent2);
-        }
-        .status-pill.frozen .status-dot {
-            background: #ffd600;
-            box-shadow: 0 0 8px #ffd600;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.8); }
-        }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: all 0.3s; }
+        .status-pill.scanning .status-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+        .status-pill.ready .status-dot { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+        .status-pill.frozen .status-dot { background: #ffd600; box-shadow: 0 0 8px #ffd600; }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
 
-        /* ── CARD RESULTADO ── */
         .card-resultado {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 14px;
-            display: none;
-            animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 20px; padding: 20px; margin-bottom: 14px;
+            display: none; animation: slideUp 0.35s cubic-bezier(0.16,1,0.3,1);
         }
         .card-resultado.visivel { display: block; }
+        @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+        .nome-aluno { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+        .nota-wrap { display: flex; align-items: baseline; gap: 6px; }
+        .nota-num { font-family: 'Space Mono', monospace; font-size: 52px; font-weight: 700; line-height: 1; color: var(--accent2); letter-spacing: -2px; }
+        .nota-den { font-family: 'Space Mono', monospace; font-size: 22px; color: var(--muted); }
+        .barra-progresso { margin-top: 14px; height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+        .barra-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.6s cubic-bezier(0.16,1,0.3,1); }
 
-        @keyframes slideUp {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .nome-aluno {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--muted);
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-
-        .nota-wrap {
-            display: flex; align-items: baseline; gap: 6px;
-        }
-        .nota-num {
-            font-family: 'Space Mono', monospace;
-            font-size: 52px;
-            font-weight: 700;
-            line-height: 1;
-            color: var(--accent2);
-            letter-spacing: -2px;
-        }
-        .nota-den {
-            font-family: 'Space Mono', monospace;
-            font-size: 22px;
-            color: var(--muted);
-        }
-
-        .barra-progresso {
-            margin-top: 14px;
-            height: 4px;
-            background: var(--border);
-            border-radius: 99px;
-            overflow: hidden;
-        }
-        .barra-fill {
-            height: 100%;
-            border-radius: 99px;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
-            transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        /* ── BOTÕES ── */
-        .btn-row {
-            display: flex; gap: 10px;
-        }
-        .btn {
-            flex: 1;
-            height: 52px;
-            border: none;
-            border-radius: 14px;
-            font-family: 'Syne', sans-serif;
-            font-weight: 700;
-            font-size: 14px;
-            letter-spacing: 0.05em;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
+        .btn-row { display: flex; gap: 10px; }
+        .btn { flex:1; height:52px; border:none; border-radius:14px; font-family:'Syne',sans-serif; font-weight:700; font-size:14px; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px; }
         .btn:active { transform: scale(0.97); }
+        .btn-capturar { background: var(--accent); color: var(--bg); }
+        .btn-capturar:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+        .btn-proximo { background: var(--accent2); color: var(--bg); display: none; }
 
-        .btn-capturar {
-            background: var(--accent);
-            color: var(--bg);
+        /* Botão histórico */
+        .historico-btn {
+            position: fixed; top: 16px; right: 20px; z-index: 11;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 8px 12px;
+            font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted);
+            cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;
         }
-        .btn-capturar:hover { background: #33eaff; }
-        .btn-capturar:disabled {
-            background: var(--border);
-            color: var(--muted);
-            cursor: not-allowed;
-        }
+        .historico-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .historico-count { background: var(--accent); color: var(--bg); border-radius: 4px; padding: 1px 6px; font-weight: 700; font-size: 10px; }
 
-        .btn-proximo {
-            background: var(--accent2);
-            color: var(--bg);
-            display: none;
-        }
-        .btn-proximo:hover { background: #33ffb0; }
-
-        /* ── CONTADOR SESSÃO ── */
-        .sessao-info {
-            position: fixed; top: 18px; right: 20px;
-            z-index: 11;
-            display: flex; gap: 12px; align-items: center;
-        }
-        .chip {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 5px 10px;
-            font-family: 'Space Mono', monospace;
-            font-size: 11px;
-            color: var(--muted);
-        }
-        .chip strong { color: var(--text); }
-
-        /* ── TOAST ── */
+        /* Toast */
         .toast {
             position: fixed; top: 70px; left: 50%;
             transform: translateX(-50%) translateY(-10px);
-            background: var(--accent2);
-            color: var(--bg);
-            padding: 10px 20px;
-            border-radius: 100px;
-            font-weight: 700;
-            font-size: 13px;
-            z-index: 20;
-            opacity: 0;
-            transition: all 0.3s;
-            pointer-events: none;
-            white-space: nowrap;
+            background: var(--accent2); color: var(--bg);
+            padding: 10px 20px; border-radius: 100px;
+            font-weight: 700; font-size: 13px; z-index: 20;
+            opacity: 0; transition: all 0.3s; pointer-events: none; white-space: nowrap;
         }
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        /* ── HISTÓRICO ── */
-        .historico-btn {
-            position: fixed; top: 16px; right: 20px;
-            z-index: 11;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 8px 12px;
-            font-family: 'Space Mono', monospace;
-            font-size: 11px;
-            color: var(--muted);
-            cursor: pointer;
-            display: flex; align-items: center; gap: 6px;
-            transition: all 0.2s;
-        }
-        .historico-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .historico-count {
-            background: var(--accent);
-            color: var(--bg);
-            border-radius: 4px;
-            padding: 1px 6px;
-            font-weight: 700;
-            font-size: 10px;
-        }
-
-        /* ── DRAWER HISTÓRICO ── */
-        .drawer {
-            position: fixed; inset: 0;
-            z-index: 30;
-            display: none;
-        }
+        /* Drawer */
+        .drawer { position: fixed; inset: 0; z-index: 30; display: none; }
         .drawer.aberto { display: block; }
-        .drawer-bg {
-            position: absolute; inset: 0;
-            background: rgba(8,12,16,0.8);
-            backdrop-filter: blur(4px);
-        }
+        .drawer-bg { position: absolute; inset: 0; background: rgba(8,12,16,0.8); backdrop-filter: blur(4px); }
         .drawer-panel {
             position: absolute; bottom: 0; left: 0; right: 0;
-            background: var(--surface);
-            border-top: 1px solid var(--border);
-            border-radius: 24px 24px 0 0;
-            padding: 20px 20px 40px;
-            max-height: 70vh;
-            overflow-y: auto;
-            animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            background: var(--surface); border-top: 1px solid var(--border);
+            border-radius: 24px 24px 0 0; padding: 20px 20px 40px;
+            max-height: 70vh; overflow-y: auto;
+            animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1);
         }
-        .drawer-handle {
-            width: 40px; height: 4px;
-            background: var(--border);
-            border-radius: 99px;
-            margin: 0 auto 20px;
-        }
-        .drawer-titulo {
-            font-size: 18px; font-weight: 800;
-            margin-bottom: 16px;
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        .drawer-handle { width: 40px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 20px; }
+        .drawer-titulo { font-size: 18px; font-weight: 800; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
         .drawer-titulo span { color: var(--muted); font-size: 13px; font-weight: 400; }
-
-        .historico-item {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border);
-        }
+        .historico-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
         .historico-item:last-child { border-bottom: none; }
         .hist-nome { font-size: 14px; font-weight: 600; }
-        .hist-nota {
-            font-family: 'Space Mono', monospace;
-            font-size: 16px;
-            color: var(--accent2);
-        }
-        .hist-pct {
-            font-size: 11px;
-            color: var(--muted);
-            margin-top: 2px;
-        }
-
-        .drawer-vazio {
-            text-align: center;
-            padding: 40px 0;
-            color: var(--muted);
-            font-size: 14px;
-        }
-
+        .hist-nota { font-family: 'Space Mono', monospace; font-size: 16px; color: var(--accent2); }
+        .hist-pct { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .drawer-vazio { text-align: center; padding: 40px 0; color: var(--muted); font-size: 14px; }
         .btn-exportar {
-            width: 100%;
-            margin-top: 16px;
-            height: 46px;
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            color: var(--text);
-            font-family: 'Syne', sans-serif;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; margin-top: 16px; height: 46px;
+            background: transparent; border: 1px solid var(--border); border-radius: 12px;
+            color: var(--text); font-family: 'Syne', sans-serif; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .btn-exportar:hover { border-color: var(--accent2); color: var(--accent2); }
 
-        /* ── DRAWER CALIBRAÇÃO ── */
-        .calib-row {
-            display: flex; align-items: center; gap: 8px;
-            margin-bottom: 8px; font-size: 12px;
-        }
+        /* Calibração */
+        .calib-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
         .calib-row label { width: 80px; text-align: right; flex-shrink: 0; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
         .calib-row input[type=range] { flex: 1; accent-color: var(--accent); }
         .calib-row .cval { width: 52px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent); flex-shrink: 0; }
         .calib-secao { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.1em; border-bottom: 1px solid var(--border); margin: 12px 0 8px; padding-bottom: 4px; }
         .btn-calib-abrir {
-            position: fixed; bottom: 100px; right: 16px;
-            z-index: 11;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 8px 10px;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.2s;
-            line-height: 1;
+            position: fixed; bottom: 100px; right: 16px; z-index: 11;
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 8px 10px; font-size: 18px; cursor: pointer; transition: all 0.2s; line-height: 1;
         }
         .btn-calib-abrir:hover { border-color: var(--accent); }
-
-        /* ── OVERLAY FOLHA ── */
-        #canvas-overlay {
-            position: fixed; inset: 0;
-            width: 100%; height: 100%;
-            object-fit: contain;
-            z-index: 3;
-            pointer-events: none;
-        }
-        .folha-status {
-            position: fixed; top: 60px; left: 50%;
-            transform: translateX(-50%);
-            z-index: 11;
-            font-family: 'Space Mono', monospace;
-            font-size: 11px;
-            letter-spacing: 0.08em;
-            background: rgba(8,12,16,0.8);
-            padding: 5px 12px;
-            border-radius: 99px;
-            border: 1px solid var(--border);
-            color: var(--muted);
-            transition: all 0.3s;
-            white-space: nowrap;
-        }
-        .folha-status.detectada { color: var(--accent2); border-color: var(--accent2); }
     </style>
 </head>
 <body>
 
-<video id="video" playsinline></video>
+<!-- Vídeo visível como base, canvas renderiza por cima -->
+<video id="video" playsinline autoplay muted></video>
 <canvas id="canvas"></canvas>
-<canvas id="canvas-overlay"></canvas>
 <div class="overlay-bottom"></div>
-<div class="folha-status" id="folha-status">PROCURANDO FOLHA</div>
 
-<!-- Header -->
 <div class="header">
     <div class="logo">OMR<span>/</span>SCAN</div>
 </div>
 
-<!-- Botão histórico -->
 <button class="historico-btn" onclick="abrirDrawer()">
     📋 <span id="hist-count-label">0</span>
     <span class="historico-count" id="hist-badge">0</span>
 </button>
 
-<!-- Mira -->
 <div class="mira" id="mira">
     <div class="mira-corner tl"></div>
     <div class="mira-corner tr"></div>
@@ -463,16 +192,13 @@
     <div class="mira-scan"></div>
 </div>
 
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<!-- Painel -->
 <div class="painel">
     <div class="status-pill scanning" id="status-pill">
         <div class="status-dot"></div>
         <span id="status-txt">AGUARDANDO QR CODE</span>
     </div>
-
     <div class="card-resultado" id="card-resultado">
         <div class="nome-aluno" id="res-nome">—</div>
         <div class="nota-wrap">
@@ -483,7 +209,6 @@
             <div class="barra-fill" id="barra-fill" style="width:0%"></div>
         </div>
     </div>
-
     <div class="btn-row">
         <button class="btn btn-capturar" id="btn-capturar" onclick="capturar()" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="4"/><path d="M3 9a2 2 0 0 1 2-2h1l2-2h8l2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
@@ -496,24 +221,16 @@
     </div>
 </div>
 
-<!-- Botão calibração -->
-<button class="btn-calib-abrir" onclick="abrirCalib()" title="Calibração">⚙️</button>
+<button class="btn-calib-abrir" onclick="abrirCalib()">⚙️</button>
 
 <!-- Drawer Histórico -->
 <div class="drawer" id="drawer">
     <div class="drawer-bg" onclick="fecharDrawer()"></div>
     <div class="drawer-panel">
         <div class="drawer-handle"></div>
-        <div class="drawer-titulo">
-            Resultados da Sessão
-            <span id="drawer-resumo"></span>
-        </div>
-        <div id="drawer-lista">
-            <div class="drawer-vazio">Nenhuma prova corrigida ainda.</div>
-        </div>
-        <button class="btn-exportar" onclick="exportarCSV()">
-            ⬇️ Exportar CSV
-        </button>
+        <div class="drawer-titulo">Resultados da Sessão <span id="drawer-resumo"></span></div>
+        <div id="drawer-lista"><div class="drawer-vazio">Nenhuma prova corrigida ainda.</div></div>
+        <button class="btn-exportar" onclick="exportarCSV()">⬇️ Exportar CSV</button>
     </div>
 </div>
 
@@ -522,34 +239,27 @@
     <div class="drawer-bg" onclick="fecharCalib()"></div>
     <div class="drawer-panel">
         <div class="drawer-handle"></div>
-        <div class="drawer-titulo">Calibração <span id="calib-status-txt"></span></div>
-
+        <div class="drawer-titulo">Calibração</div>
         <div class="calib-secao">Posição inicial</div>
         <div class="calib-row"><label>Offset X</label><input type="range" id="c_offsetX" min="-4" max="0" step="0.005" value="-2.175" oninput="syncCalib('offsetX',this,3,'c_v_offsetX')"><span class="cval" id="c_v_offsetX">-2.175</span></div>
         <div class="calib-row"><label>Offset Y</label><input type="range" id="c_offsetY" min="-1" max="3" step="0.005" value="1.560" oninput="syncCalib('offsetY',this,3,'c_v_offsetY')"><span class="cval" id="c_v_offsetY">1.560</span></div>
-
         <div class="calib-secao">Espaçamento</div>
         <div class="calib-row"><label>Gap H</label><input type="range" id="c_gapH" min="0.1" max="1.0" step="0.001" value="0.611" oninput="syncCalib('gapH',this,3,'c_v_gapH')"><span class="cval" id="c_v_gapH">0.611</span></div>
         <div class="calib-row"><label>Gap V</label><input type="range" id="c_gapV" min="0.1" max="0.8" step="0.001" value="0.335" oninput="syncCalib('gapV',this,3,'c_v_gapV')"><span class="cval" id="c_v_gapV">0.335</span></div>
         <div class="calib-row"><label>Col Gap</label><input type="range" id="c_colGap" min="0.5" max="3.0" step="0.005" value="1.680" oninput="syncCalib('colGap',this,3,'c_v_colGap')"><span class="cval" id="c_v_colGap">1.680</span></div>
-
         <div class="calib-secao">Detecção</div>
         <div class="calib-row"><label>Threshold</label><input type="range" id="c_thresh" min="50" max="250" step="1" value="81" oninput="syncCalib('threshold',this,0,'c_v_thresh')"><span class="cval" id="c_v_thresh">81</span></div>
-
         <button class="btn-exportar" onclick="copiarConfig()">📋 Copiar valores</button>
     </div>
 </div>
 
 <script>
-    const video    = document.getElementById('video');
-    const canvas   = document.getElementById('canvas');
-    const ctx      = canvas.getContext('2d');
-    const canvasOv = document.getElementById('canvas-overlay');
-    const ctxOv    = canvasOv.getContext('2d');
-    const mira     = document.getElementById('mira');
+    const video       = document.getElementById('video');
+    const canvas      = document.getElementById('canvas');
+    const ctx         = canvas.getContext('2d');
+    const mira        = document.getElementById('mira');
     const statusPill  = document.getElementById('status-pill');
     const statusTxt   = document.getElementById('status-txt');
-    const folhaStatus = document.getElementById('folha-status');
     const cardRes     = document.getElementById('card-resultado');
     const resNome     = document.getElementById('res-nome');
     const resAcertos  = document.getElementById('res-acertos');
@@ -560,10 +270,14 @@
 
     let congelado = false;
     let dadosAtuais = null;
-    let imagemCorrigida = null; // ImageData após homografia
-    let qrNaCorrigida = null;   // posição do QR na imagem corrigida
+    let imagemCongelada = null;
     let historico = [];
-    let cvReady = false;
+
+    // Suavização QR
+    const SMOOTH_N = 5;
+    let qrBuffer = [];
+    let framesSerQR = 0;
+    const DEBOUNCE = 8;
 
     const config = {
         offsetX: -2.175, offsetY: 1.560,
@@ -571,28 +285,12 @@
         colGap: 1.680, threshold: 81
     };
 
-    // ── OPENCV PRONTO ──
-    document.getElementById('opencvScript').onload = () => {
-        if (typeof cv !== 'undefined' && cv.then) {
-            cv.then(() => { cvReady = true; });
-        } else {
-            cvReady = true;
-        }
-    };
-
-    // ── SUAVIZAÇÃO QR ──
-    const SMOOTH_N = 5;
-    let qrBuffer = [];
-    let framesSerQR = 0;
-    const DEBOUNCE = 8;
-
     function smoothQR(code) {
         qrBuffer.push({
             tl: {...code.location.topLeftCorner},
             tr: {...code.location.topRightCorner},
             bl: {...code.location.bottomLeftCorner},
             br: {...code.location.bottomRightCorner},
-            data: code.data
         });
         if (qrBuffer.length > SMOOTH_N) qrBuffer.shift();
         const n = qrBuffer.length;
@@ -604,231 +302,15 @@
                 bottomLeftCorner:  {x: avg('bl','x'), y: avg('bl','y')},
                 bottomRightCorner: {x: avg('br','x'), y: avg('br','y')},
             },
-            data: qrBuffer[qrBuffer.length-1].data
+            data: code.data
         };
     }
 
-    // ── DETECÇÃO DE BORDAS DA FOLHA (JS puro, sem OpenCV) ──
-    // Retorna os 4 cantos do maior quadrilátero branco encontrado, ou null
-    let folhaBuffer = [];
-    const FOLHA_SMOOTH = 4;
-
-    function detectarFolha(imgData, W, H) {
-        // 1. Converte para escala de cinza e aplica threshold para isolar fundo branco
-        const data = imgData.data;
-        const gray = new Uint8Array(W * H);
-        for (let i = 0; i < W * H; i++) {
-            const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
-            gray[i] = (r*77 + g*150 + b*29) >> 8;
-        }
-
-        // 2. Amostrar bordas em múltiplos pontos para encontrar os 4 cantos
-        // Estratégia: varre das bordas para o centro procurando pixels claros
-        const MARGEM = 0.05;
-        const PASSOS = 40;
-        const THRESH_FOLHA = 180;
-
-        function scanLinha(x0, y0, dx, dy, steps) {
-            for (let s = 0; s < steps; s++) {
-                const x = Math.round(x0 + dx * s);
-                const y = Math.round(y0 + dy * s);
-                if (x < 0 || x >= W || y < 0 || y >= H) continue;
-                if (gray[y * W + x] > THRESH_FOLHA) return {x, y};
-            }
-            return null;
-        }
-
-        // Varre de cada canto para o centro
-        const maxDist = Math.max(W, H) * 0.7;
-        const step = maxDist / PASSOS;
-
-        // Canto TL: varre de (0,0) em diagonal
-        const tl = scanLinha(0, 0, step/Math.sqrt(2), step/Math.sqrt(2), PASSOS);
-        // Canto TR: varre de (W,0) em diagonal
-        const tr = scanLinha(W-1, 0, -step/Math.sqrt(2), step/Math.sqrt(2), PASSOS);
-        // Canto BL: varre de (0,H) em diagonal
-        const bl = scanLinha(0, H-1, step/Math.sqrt(2), -step/Math.sqrt(2), PASSOS);
-        // Canto BR: varre de (W,H) em diagonal
-        const br = scanLinha(W-1, H-1, -step/Math.sqrt(2), -step/Math.sqrt(2), PASSOS);
-
-        if (!tl || !tr || !bl || !br) return null;
-
-        // Verifica se o quadrilátero tem tamanho mínimo razoável (> 40% da tela)
-        const largura = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-        const altura  = Math.hypot(bl.x - tl.x, bl.y - tl.y);
-        if (largura < W * 0.3 || altura < H * 0.3) return null;
-
-        return {tl, tr, bl, br};
-    }
-
-    function smoothFolha(cantos) {
-        folhaBuffer.push(cantos);
-        if (folhaBuffer.length > FOLHA_SMOOTH) folhaBuffer.shift();
-        const n = folhaBuffer.length;
-        const avg = (k, a) => folhaBuffer.reduce((s, f) => s + f[k][a], 0) / n;
-        return {
-            tl: {x: avg('tl','x'), y: avg('tl','y')},
-            tr: {x: avg('tr','x'), y: avg('tr','y')},
-            bl: {x: avg('bl','x'), y: avg('bl','y')},
-            br: {x: avg('br','x'), y: avg('br','y')},
-        };
-    }
-
-    // ── HOMOGRAFIA (perspectiva → retangular) ──
-    // Implementação de homografia 2D em JS puro
-    function calcHomografia(src, dstW, dstH) {
-        // src: {tl, tr, bl, br} — pontos na imagem original
-        // dst: retângulo dstW x dstH
-        const dst = {
-            tl: {x:0,      y:0},
-            tr: {x:dstW,   y:0},
-            bl: {x:0,      y:dstH},
-            br: {x:dstW,   y:dstH}
-        };
-
-        // Monta sistema Ax = b para homografia 3x3
-        const pts_src = [src.tl, src.tr, src.br, src.bl];
-        const pts_dst = [dst.tl, dst.tr, dst.br, dst.bl];
-
-        const A = [];
-        for (let i = 0; i < 4; i++) {
-            const {x: xs, y: ys} = pts_src[i];
-            const {x: xd, y: yd} = pts_dst[i];
-            A.push([-xs, -ys, -1, 0, 0, 0, xd*xs, xd*ys, xd]);
-            A.push([0, 0, 0, -xs, -ys, -1, yd*xs, yd*ys, yd]);
-        }
-
-        // Resolve via eliminação gaussiana
-        const h = gaussianElim(A);
-        if (!h) return null;
-
-        return [
-            h[0], h[1], h[2],
-            h[3], h[4], h[5],
-            h[6], h[7], 1
-        ];
-    }
-
-    function gaussianElim(A) {
-        const n = 8;
-        // Augmented matrix com b embutido
-        const M = A.map(row => [...row]);
-
-        for (let col = 0; col < n; col++) {
-            // Pivô
-            let maxRow = col;
-            let maxVal = Math.abs(M[col][col]);
-            for (let row = col+1; row < 2*n; row++) {
-                if (Math.abs(M[row][col]) > maxVal) { maxVal = Math.abs(M[row][col]); maxRow = row; }
-            }
-            [M[col], M[maxRow]] = [M[maxRow], M[col]];
-            if (Math.abs(M[col][col]) < 1e-10) return null;
-
-            for (let row = 0; row < 2*n; row++) {
-                if (row === col) continue;
-                const factor = M[row][col] / M[col][col];
-                for (let k = col; k <= n; k++) M[row][k] -= factor * M[col][k];
-            }
-        }
-        return M.slice(0, n).map((row, i) => row[n] / row[i]);
-    }
-
-    function aplicarHomografia(H, srcData, srcW, srcH, dstW, dstH) {
-        // H: src→dst. Precisamos do inverso para mapear dst→src
-        const dst = new ImageData(dstW, dstH);
-        const dstData = dst.data;
-        const srcPx = srcData.data;
-
-        // Inverte H (3x3)
-        const Hinv = invertMatrix3x3(H);
-        if (!Hinv) return null;
-
-        for (let dy = 0; dy < dstH; dy++) {
-            for (let dx = 0; dx < dstW; dx++) {
-                // Transforma ponto dst → src
-                const w  = Hinv[6]*dx + Hinv[7]*dy + Hinv[8];
-                const sx = (Hinv[0]*dx + Hinv[1]*dy + Hinv[2]) / w;
-                const sy = (Hinv[3]*dx + Hinv[4]*dy + Hinv[5]) / w;
-
-                const sx0 = Math.floor(sx), sy0 = Math.floor(sy);
-                if (sx0 < 0 || sx0 >= srcW-1 || sy0 < 0 || sy0 >= srcH-1) continue;
-
-                // Bilinear interpolation
-                const fx = sx - sx0, fy = sy - sy0;
-                const i00 = (sy0 * srcW + sx0) * 4;
-                const i10 = (sy0 * srcW + sx0+1) * 4;
-                const i01 = ((sy0+1) * srcW + sx0) * 4;
-                const i11 = ((sy0+1) * srcW + sx0+1) * 4;
-                const idst = (dy * dstW + dx) * 4;
-
-                for (let c = 0; c < 3; c++) {
-                    dstData[idst+c] = Math.round(
-                        srcPx[i00+c] * (1-fx)*(1-fy) +
-                        srcPx[i10+c] * fx*(1-fy) +
-                        srcPx[i01+c] * (1-fx)*fy +
-                        srcPx[i11+c] * fx*fy
-                    );
-                }
-                dstData[idst+3] = 255;
-            }
-        }
-        return dst;
-    }
-
-    function invertMatrix3x3(m) {
-        const [a,b,c,d,e,f,g,h,i] = m;
-        const det = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
-        if (Math.abs(det) < 1e-10) return null;
-        const inv = [
-            (e*i-f*h)/det, (c*h-b*i)/det, (b*f-c*e)/det,
-            (f*g-d*i)/det, (a*i-c*g)/det, (c*d-a*f)/det,
-            (d*h-e*g)/det, (b*g-a*h)/det, (a*e-b*d)/det
-        ];
-        return inv;
-    }
-
-    // ── DESENHA CONTORNO DA FOLHA ──
-    let folhaAtual = null;
-
-    function desenharContorno(cantos, W, H) {
-        canvasOv.width  = canvas.width;
-        canvasOv.height = canvas.height;
-        ctxOv.clearRect(0, 0, W, H);
-        if (!cantos) return;
-
-        const {tl, tr, bl, br} = cantos;
-        ctxOv.beginPath();
-        ctxOv.moveTo(tl.x, tl.y);
-        ctxOv.lineTo(tr.x, tr.y);
-        ctxOv.lineTo(br.x, br.y);
-        ctxOv.lineTo(bl.x, bl.y);
-        ctxOv.closePath();
-        ctxOv.strokeStyle = 'rgba(0,255,157,0.9)';
-        ctxOv.lineWidth = 3;
-        ctxOv.stroke();
-        ctxOv.fillStyle = 'rgba(0,255,157,0.06)';
-        ctxOv.fill();
-
-        // Cantos
-        [tl, tr, bl, br].forEach(p => {
-            ctxOv.beginPath();
-            ctxOv.arc(p.x, p.y, 10, 0, Math.PI*2);
-            ctxOv.fillStyle = 'rgba(0,255,157,0.9)';
-            ctxOv.fill();
-        });
-    }
-
-    // ── STATUS ──
     function setStatus(estado, texto) {
         statusPill.className = 'status-pill ' + estado;
         statusTxt.innerText = texto;
     }
-    function setFolhaStatus(detectada, texto) {
-        folhaStatus.className = 'folha-status' + (detectada ? ' detectada' : '');
-        folhaStatus.innerText = texto;
-    }
 
-    // ── TOAST ──
     function showToast(msg) {
         const t = document.getElementById('toast');
         t.innerText = msg;
@@ -840,81 +322,52 @@
     async function iniciarCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: {ideal:1280}, height: {ideal:720} }
+                video: { facingMode: {ideal: "environment"} }
             });
             video.srcObject = stream;
-            await video.play();
-
-            // Espera o vídeo ter dimensões reais
-            await new Promise(res => {
-                if (video.videoWidth > 0) return res();
-                video.addEventListener('loadedmetadata', res, {once: true});
-            });
-
-            // Inicializa canvas com tamanho real do vídeo
-            canvas.width  = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvasOv.width  = video.videoWidth;
-            canvasOv.height = video.videoHeight;
-
-            // Esconde o video depois de confirmar que está rodando
-            video.style.display = 'none';
-
-            requestAnimationFrame(tick);
+            video.onloadedmetadata = () => {
+                video.play();
+                requestAnimationFrame(tick);
+            };
         } catch (err) {
-            setStatus('', 'ERRO DE CÂMERA');
-            alert("Erro de câmera: " + err);
+            setStatus('', 'ERRO: ' + err.name);
+            alert("Erro câmera: " + err.message);
         }
     }
     iniciarCamera();
 
-    // ── LOOP PRINCIPAL ──
-    let ultimoTick = 0;
+    // ── LOOP ──
+    let ultimoQR = 0;
     function tick(ts) {
         if (congelado) return;
         requestAnimationFrame(tick);
-        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+        if (video.readyState < 2) return;
 
-        // Sincroniza tamanho do canvas com o vídeo apenas se mudou
+        // Ajusta canvas ao tamanho real do vídeo
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-            canvas.width    = video.videoWidth;
-            canvas.height   = video.videoHeight;
-            canvasOv.width  = video.videoWidth;
-            canvasOv.height = video.videoHeight;
+            canvas.width  = video.videoWidth  || 640;
+            canvas.height = video.videoHeight || 480;
         }
 
-        // Desenha frame da câmera
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        if (ts - ultimoTick < 100) return;
-        ultimoTick = ts;
+        // Limita leitura do QR a ~10fps
+        if (ts - ultimoQR < 100) return;
+        ultimoQR = ts;
 
-        const W = canvas.width, H = canvas.height;
-        const imgData = ctx.getImageData(0, 0, W, H);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, canvas.width, canvas.height);
 
-        // 1. Detecta folha
-        const cantos = detectarFolha(imgData, W, H);
-        if (cantos) {
-            folhaAtual = smoothFolha(cantos);
-            desenharContorno(folhaAtual, W, H);
-            setFolhaStatus(true, '📄 FOLHA DETECTADA');
-        } else {
-            folhaAtual = null;
-            desenharContorno(null, W, H);
-            setFolhaStatus(false, 'PROCURANDO FOLHA');
-        }
-
-        // 2. Detecta QR no frame original
-        const code = jsQR(imgData.data, W, H);
-        if (code) {
+        if (code && code.data.includes('|GB:')) {
             framesSerQR = 0;
             const match = code.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
             if (match) {
-                const qrSmooth = smoothQR(code);
-                setStatus('ready', 'QR + FOLHA OK');
+                const qrS = smoothQR(code);
+                processar(qrS, match[2], match[1], false, imgData);
+                dadosAtuais = { code: qrS, gabarito: match[2], nome: match[1] };
+                setStatus('ready', 'QR DETECTADO ✓');
                 mira.classList.add('oculta');
                 btnCapturar.disabled = false;
-                dadosAtuais = { code: qrSmooth, gabarito: match[2], nome: match[1] };
             }
         } else {
             framesSerQR++;
@@ -935,131 +388,86 @@
         congelado = true;
         btnCapturar.style.display = 'none';
         btnProximo.style.display = 'block';
-        setStatus('frozen', 'PROCESSANDO...');
-
-        const W = canvas.width, H = canvas.height;
-        const imgData = ctx.getImageData(0, 0, W, H);
-
-        // Se folha detectada: aplica homografia para retificar perspectiva
-        if (folhaAtual) {
-            const A4_W = 794, A4_H = 1123; // proporção A4 em pixels
-            const H_mat = calcHomografia(folhaAtual, A4_W, A4_H);
-
-            if (H_mat) {
-                const retificada = aplicarHomografia(H_mat, imgData, W, H, A4_W, A4_H);
-                if (retificada) {
-                    // Renderiza imagem retificada no canvas
-                    canvas.width  = A4_W;
-                    canvas.height = A4_H;
-                    ctx.putImageData(retificada, 0, 0);
-
-                    // Detecta QR na imagem retificada para posição atualizada
-                    const qrRet = jsQR(retificada.data, A4_W, A4_H);
-                    if (qrRet) {
-                        const match = qrRet.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-                        if (match) {
-                            imagemCorrigida = retificada;
-                            processar(qrRet, match[2], match[1], true, retificada);
-                            setStatus('frozen', 'CONGELADO');
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fallback: usa frame original se homografia falhou
-        const imgCongelada = ctx.getImageData(0, 0, W, H);
-        imagemCorrigida = imgCongelada;
-        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imgCongelada);
         setStatus('frozen', 'CONGELADO');
+        imagemCongelada = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
     }
 
     // ── PRÓXIMO ──
     function proximo() {
         congelado = false;
         dadosAtuais = null;
-        imagemCorrigida = null;
+        imagemCongelada = null;
         qrBuffer = [];
-        folhaBuffer = [];
         framesSerQR = 0;
-        folhaAtual = null;
         btnCapturar.style.display = 'block';
         btnCapturar.disabled = true;
         btnProximo.style.display = 'none';
         cardRes.classList.remove('visivel');
         mira.classList.remove('oculta');
         setStatus('scanning', 'AGUARDANDO QR CODE');
-        setFolhaStatus(false, 'PROCURANDO FOLHA');
         requestAnimationFrame(tick);
     }
 
     // ── PROCESSAR ──
     function processar(qr, gabarito, nome, finalizar, pixelData) {
-        const data = pixelData.data;
-        const imgW = pixelData.width;
-        const imgH = pixelData.height;
-
-        const qrW = Math.hypot(
-            qr.location.topRightCorner.x - qr.location.topLeftCorner.x,
-            qr.location.topRightCorner.y - qr.location.topLeftCorner.y
-        );
-        const qrH2 = Math.hypot(
-            qr.location.bottomLeftCorner.x - qr.location.topLeftCorner.x,
-            qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y
-        );
-        const qrSize = (qrW + qrH2) / 2;
-
-        // Vetores de perspectiva a partir dos lados reais do QR
         const tl = qr.location.topLeftCorner;
         const tr = qr.location.topRightCorner;
         const bl = qr.location.bottomLeftCorner;
-        const cx = (tl.x + qr.location.bottomRightCorner.x) / 2;
-        const cy = (tl.y + qr.location.bottomRightCorner.y) / 2;
+        const br = qr.location.bottomRightCorner;
 
-        const ux = (tr.x - tl.x) / qrW, uy = (tr.y - tl.y) / qrW; // vetor direita
-        const vx = (bl.x - tl.x) / qrH2, vy = (bl.y - tl.y) / qrH2; // vetor baixo
+        const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+        const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+        const size = (qrW + qrH) / 2;
+        const cx   = (tl.x + br.x) / 2;
+        const cy   = (tl.y + br.y) / 2;
 
+        // Vetores reais dos lados do QR (correção de perspectiva)
+        const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
+        const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
+
+        const data = pixelData.data;
+        const W = pixelData.width, H = pixelData.height;
         let acertos = 0;
 
         for (let i = 0; i < gabarito.length; i++) {
-            const col = Math.floor(i / 30);
-            const lin = i % 30;
-            const baseX = config.offsetX + (col * config.colGap);
-            const baseY = config.offsetY + (lin * config.gapV);
+            const col  = Math.floor(i / 30);
+            const lin  = i % 30;
+            const bx   = config.offsetX + col * config.colGap;
+            const by   = config.offsetY + lin * config.gapV;
 
             let marcada = -1, maxEsc = 0;
 
             for (let alt = 0; alt < 5; alt++) {
-                const normX = baseX + (alt * config.gapH);
-                const normY = baseY;
+                const nx = bx + alt * config.gapH;
+                const ny = by;
+                const x  = cx + nx * size * ux + ny * size * vx;
+                const y  = cy + nx * size * uy + ny * size * vy;
 
-                const x = cx + normX * qrSize * ux + normY * qrSize * vx;
-                const y = cy + normX * qrSize * uy + normY * qrSize * vy;
+                if (x < 1 || x > W-2 || y < 1 || y > H-2) continue;
 
-                if (x < 0 || x > imgW || y < 0 || y > imgH) continue;
-
-                let totalEsc = 0;
+                let esc = 0;
                 for (let dx = -1; dx <= 1; dx++) {
                     for (let dy = -1; dy <= 1; dy++) {
-                        const px  = Math.min(Math.max(Math.floor(x+dx), 0), imgW-1);
-                        const py  = Math.min(Math.max(Math.floor(y+dy), 0), imgH-1);
-                        const idx = (py * imgW + px) * 4;
-                        totalEsc += 255 - ((data[idx] + data[idx+1] + data[idx+2]) / 3);
+                        const px  = Math.floor(x+dx);
+                        const py  = Math.floor(y+dy);
+                        const idx = (py * W + px) * 4;
+                        esc += 255 - ((data[idx] + data[idx+1] + data[idx+2]) / 3);
                     }
                 }
-                const esc = totalEsc / 9;
+                esc /= 9;
+
                 const marcadaEsta = esc > config.threshold;
-                const correta = String.fromCharCode(65 + alt) === gabarito[i];
+                const correta = String.fromCharCode(65+alt) === gabarito[i];
 
                 ctx.beginPath();
                 ctx.arc(x, y, 8, 0, Math.PI*2);
                 ctx.fillStyle = marcadaEsta
-                    ? (correta ? 'rgba(0,255,157,0.85)' : 'rgba(255,61,90,0.85)')
-                    : 'rgba(255,255,255,0.15)';
+                    ? (correta ? 'rgba(0,255,157,0.88)' : 'rgba(255,61,90,0.88)')
+                    : 'rgba(255,255,255,0.18)';
                 ctx.fill();
 
-                ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,0.5)';
+                ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,0.55)';
                 ctx.font = 'bold 7px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -1072,16 +480,15 @@
 
         if (finalizar) {
             const total = gabarito.length;
-            const pct = Math.round((acertos/total)*100);
-            resNome.innerText    = nome;
-            resAcertos.innerText = acertos;
-            resTotal.innerText   = `/ ${total}`;
+            const pct   = Math.round((acertos/total)*100);
+            resNome.innerText     = nome;
+            resAcertos.innerText  = acertos;
+            resTotal.innerText    = `/ ${total}`;
             barraFill.style.width = pct + '%';
             cardRes.classList.add('visivel');
-            const jaExiste = historico.findIndex(h => h.nome === nome);
+            const idx = historico.findIndex(h => h.nome === nome);
             const entrada = {nome, acertos, total, pct};
-            if (jaExiste >= 0) historico[jaExiste] = entrada;
-            else historico.push(entrada);
+            if (idx >= 0) historico[idx] = entrada; else historico.push(entrada);
             atualizarBadge();
         }
     }
@@ -1090,9 +497,9 @@
     function syncCalib(key, input, dec, spanId) {
         config[key] = parseFloat(input.value);
         document.getElementById(spanId).innerText = config[key].toFixed(dec);
-        if (congelado && dadosAtuais && imagemCorrigida) {
-            ctx.putImageData(imagemCorrigida, 0, 0);
-            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCorrigida);
+        if (congelado && dadosAtuais && imagemCongelada) {
+            ctx.putImageData(imagemCongelada, 0, 0);
+            processar(dadosAtuais.code, dadosAtuais.gabarito, dadosAtuais.nome, true, imagemCongelada);
         }
     }
     function abrirCalib()  { document.getElementById('drawer-calib').classList.add('aberto'); }
@@ -1111,7 +518,7 @@
     function abrirDrawer() {
         const lista = document.getElementById('drawer-lista');
         const resumo = document.getElementById('drawer-resumo');
-        if (historico.length === 0) {
+        if (!historico.length) {
             lista.innerHTML = '<div class="drawer-vazio">Nenhuma prova corrigida ainda.</div>';
             resumo.innerText = '';
         } else {
@@ -1127,7 +534,7 @@
     }
     function fecharDrawer() { document.getElementById('drawer').classList.remove('aberto'); }
 
-    // ── EXPORTAR CSV ──
+    // ── CSV ──
     function exportarCSV() {
         if (!historico.length) { showToast('Nenhum resultado ainda'); return; }
         const linhas = ['Nome,Acertos,Total,Porcentagem'];
@@ -1139,8 +546,6 @@
         URL.revokeObjectURL(url);
         showToast('CSV exportado!');
     }
-
-    let framesSerQR = 0;
 </script>
 </body>
 </html>
