@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMR — Correção em Lote</title>
+    <title>OMR — Diagnóstico</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -14,187 +14,261 @@
             --text:#e8f0f5; --muted:#52687a; --card:#111922;
         }
         * { box-sizing:border-box; margin:0; padding:0; }
-        html, body { height:100%; }
-        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:grid; grid-template-columns:260px 1fr; overflow:hidden; }
 
-        .app { display:grid; grid-template-columns:300px 1fr; min-height:100vh; }
-
-        .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:28px 22px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh; overflow-y:auto; }
-        .brand { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.2em; color:var(--accent); }
-        .brand span { color:var(--muted); }
-        h1 { font-size:21px; font-weight:800; line-height:1.2; margin-top:6px; }
+        .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:20px 16px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
+        .brand { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:.2em; color:var(--accent); }
+        h1 { font-size:16px; font-weight:800; margin-top:4px; line-height:1.3; }
         h1 em { color:var(--accent2); font-style:normal; }
 
-        .upload-zone { border:2px dashed var(--border); border-radius:16px; padding:28px 16px; text-align:center; cursor:pointer; transition:all .25s; background:var(--bg); position:relative; }
-        .upload-zone:hover, .upload-zone.drag { border-color:var(--accent); background:rgba(0,229,255,.04); }
+        .sec { font-size:9px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:6px; }
+
+        .upload-zone { border:2px dashed var(--border); border-radius:10px; padding:16px 10px; text-align:center; cursor:pointer; transition:all .2s; background:var(--bg); position:relative; }
+        .upload-zone:hover { border-color:var(--accent); }
         .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
-        .upload-icon { font-size:32px; margin-bottom:8px; }
-        .upload-label { font-size:13px; font-weight:700; color:var(--accent); }
-        .upload-sub { font-size:11px; color:var(--muted); margin-top:3px; }
+        .upload-lbl { font-size:12px; font-weight:700; color:var(--accent); margin-top:4px; }
+        .upload-sub { font-size:10px; color:var(--muted); margin-top:2px; }
 
-        .btn-proc { width:100%; padding:14px; border:none; border-radius:12px; background:var(--accent2); color:var(--bg); font-family:'Syne',sans-serif; font-weight:800; font-size:15px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
-        .btn-proc:hover:not(:disabled) { filter:brightness(1.1); }
-        .btn-proc:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
-        .btn-csv { width:100%; padding:12px; border:1px solid var(--border); border-radius:12px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:13px; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
-        .btn-csv:hover:not(:disabled) { border-color:var(--accent2); color:var(--accent2); }
-        .btn-csv:disabled { opacity:.4; cursor:not-allowed; }
+        /* Slider threshold */
+        .thresh-wrap { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+        .thresh-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
+        .thresh-row input { flex:1; accent-color:var(--accent); }
+        .thresh-row span { font-family:'Space Mono',monospace; font-size:12px; color:var(--accent); width:28px; text-align:right; }
 
-        .main { padding:32px; overflow-y:auto; }
+        /* Nav páginas */
+        .nav-row { display:flex; gap:6px; align-items:center; }
+        .nav-btn { flex:1; padding:7px; border:1px solid var(--border); border-radius:7px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:11px; cursor:pointer; transition:all .2s; text-align:center; }
+        .nav-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+        .nav-btn:disabled { opacity:.3; cursor:not-allowed; }
+        .pag-lbl { font-family:'Space Mono',monospace; font-size:10px; color:var(--muted); text-align:center; min-width:40px; }
 
-        .progress-bar-wrap { background:var(--border); border-radius:99px; height:6px; margin-bottom:6px; overflow:hidden; display:none; }
-        .progress-bar-wrap.visivel { display:block; }
-        .progress-bar-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .3s; }
-        .progress-label { font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:24px; min-height:16px; }
+        /* Info QR */
+        .info-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:'Space Mono',monospace; font-size:10px; line-height:1.8; }
+        .ok { color:var(--accent2); } .err { color:var(--danger); } .muted { color:var(--muted); }
 
-        .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:28px; }
-        .stat-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
-        .stat-val { font-family:'Space Mono',monospace; font-size:30px; font-weight:700; line-height:1; }
-        .stat-val.verde { color:var(--accent2); }
-        .stat-val.azul  { color:var(--accent); }
-        .stat-val.warn  { color:#ffd600; }
-        .stat-lbl { font-size:11px; color:var(--muted); margin-top:4px; text-transform:uppercase; letter-spacing:.06em; }
+        /* Resultado */
+        .res-grande { font-family:'Space Mono',monospace; font-size:32px; font-weight:700; color:var(--accent2); }
+        .res-nome { font-size:11px; color:var(--muted); margin-top:2px; word-break:break-all; }
 
-        .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
-        table { width:100%; border-collapse:collapse; }
-        thead th { background:var(--surface); padding:12px 16px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; border-bottom:1px solid var(--border); }
-        tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
-        tbody tr:last-child { border-bottom:none; }
-        tbody tr:hover { background:rgba(255,255,255,.03); }
-        tbody td { padding:12px 16px; font-size:13px; vertical-align:middle; }
-        .td-nome { font-weight:700; }
-        .td-nota { font-family:'Space Mono',monospace; font-weight:700; font-size:15px; }
-        .td-nota.alta  { color:var(--accent2); }
-        .td-nota.media { color:#ffd600; }
-        .td-nota.baixa { color:var(--danger); }
-        .td-pct { font-family:'Space Mono',monospace; font-size:12px; color:var(--muted); }
-        .mini-bar { width:70px; height:4px; background:var(--border); border-radius:99px; overflow:hidden; display:inline-block; vertical-align:middle; margin-left:6px; }
-        .mini-bar-fill { height:100%; border-radius:99px; }
-        .badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:10px; font-weight:700; }
-        .badge.ok  { background:rgba(0,255,157,.15); color:var(--accent2); }
-        .badge.err { background:rgba(255,61,90,.15); color:var(--danger); }
-        .thumb { width:34px; height:48px; border-radius:4px; object-fit:cover; border:1px solid var(--border); }
-        .thumb-ph { width:34px; height:48px; border-radius:4px; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:14px; }
+        /* Legenda */
+        .legenda { display:flex; flex-wrap:wrap; gap:6px; }
+        .leg { display:flex; align-items:center; gap:4px; font-size:10px; }
+        .ldot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
 
-        .empty-state { text-align:center; padding:80px 20px; color:var(--muted); }
-        .empty-state .ei { font-size:52px; margin-bottom:14px; opacity:.35; }
-        .empty-state p { font-size:14px; line-height:1.6; }
+        /* Botões */
+        .btn-primary { width:100%; padding:11px; border:none; border-radius:9px; background:var(--accent2); color:var(--bg); font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; transition:all .2s; margin-top:auto; }
+        .btn-primary:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
+        .btn-primary:not(:disabled):hover { filter:brightness(1.1); }
 
-        @media (max-width:680px) { .app { grid-template-columns:1fr; } .sidebar { position:static; height:auto; } }
+        /* Canvas area */
+        .canvas-area { position:relative; overflow:auto; background:#0a0a0a; display:flex; }
+        #canvas { display:block; flex-shrink:0; cursor:crosshair; }
+
+        .zoom-bar { position:absolute; bottom:14px; right:14px; display:flex; gap:5px; z-index:10; }
+        .zbtn { width:32px; height:32px; border:1px solid var(--border); border-radius:7px; background:rgba(14,20,25,.9); color:var(--text); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+        .zbtn:hover { border-color:var(--accent); }
+        .zlbl { height:32px; padding:0 8px; border:1px solid var(--border); border-radius:7px; background:rgba(14,20,25,.9); color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; display:flex; align-items:center; }
+
+        /* Loading */
+        .loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(8,12,16,.8); z-index:20; font-size:14px; color:var(--muted); display:none; }
+        .loading.show { display:flex; }
     </style>
 </head>
 <body>
-<div class="app">
 
-    <aside class="sidebar">
-        <div>
-            <div class="brand">OMR<span>/</span>PDF</div>
-            <h1>Correção<br>em <em>Lote</em></h1>
+<aside class="sidebar">
+    <div>
+        <div class="brand">OMR<span style="color:var(--muted)">/</span>DIAG</div>
+        <h1>Diagnóstico<br><em>Visual</em></h1>
+    </div>
+
+    <div>
+        <div class="sec">PDF ou Imagem</div>
+        <div class="upload-zone" id="upload-zone">
+            <input type="file" accept="application/pdf,image/*" id="file-input">
+            <div style="font-size:24px">📄</div>
+            <div class="upload-lbl" id="upload-lbl">Abrir arquivo</div>
+            <div class="upload-sub" id="upload-sub">PDF ou JPG/PNG</div>
         </div>
+    </div>
 
-        <div>
-            <div class="upload-zone" id="upload-zone">
-                <input type="file" accept="application/pdf" id="file-input">
-                <div class="upload-icon">📄</div>
-                <div class="upload-label" id="upload-label">Clique ou arraste o PDF</div>
-                <div class="upload-sub" id="upload-sub">Uma folha por página</div>
+    <div>
+        <div class="sec">Página</div>
+        <div class="nav-row">
+            <button class="nav-btn" id="btn-prev" onclick="mudarPag(-1)" disabled>◀</button>
+            <span class="pag-lbl" id="pag-lbl">— / —</span>
+            <button class="nav-btn" id="btn-next" onclick="mudarPag(+1)" disabled>▶</button>
+        </div>
+    </div>
+
+    <div>
+        <div class="sec">QR Code</div>
+        <div class="info-box" id="qr-info"><span class="muted">Aguardando...</span></div>
+    </div>
+
+    <div>
+        <div class="sec">Threshold de detecção</div>
+        <div class="thresh-wrap">
+            <div style="font-size:11px;color:var(--muted)">Suba até as bolinhas marcadas ficarem <span style="color:var(--accent2)">verdes</span> e as vazias ficarem brancas.</div>
+            <div class="thresh-row">
+                <input type="range" id="sl-thresh" min="5" max="150" value="30" oninput="atualizarThresh(this.value)">
+                <span id="v-thresh">30</span>
             </div>
         </div>
+    </div>
 
-        <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px;">
-            <button class="btn-proc" id="btn-proc" onclick="processar()" disabled>▶ PROCESSAR</button>
-            <button class="btn-csv"  id="btn-csv"  onclick="exportCSV()"  disabled>⬇️ Exportar CSV</button>
+    <div>
+        <div class="sec">Legenda</div>
+        <div class="legenda">
+            <div class="leg"><div class="ldot" style="background:#00ff9d"></div>Certa</div>
+            <div class="leg"><div class="ldot" style="background:#ff3d5a"></div>Errada</div>
+            <div class="leg"><div class="ldot" style="background:rgba(255,255,255,.2)"></div>Vazia</div>
+            <div class="leg"><div class="ldot" style="background:#ffd600;border-radius:2px"></div>QR</div>
         </div>
-    </aside>
+    </div>
 
-    <main class="main">
-        <div class="progress-bar-wrap" id="prog-wrap">
-            <div class="progress-bar-fill" id="prog-fill" style="width:0%"></div>
-        </div>
-        <div class="progress-label" id="prog-label"></div>
+    <div>
+        <div class="sec">Resultado</div>
+        <div class="res-grande" id="res-nota">— / —</div>
+        <div class="res-nome" id="res-nome">—</div>
+    </div>
 
-        <div class="stats-row" id="stats-row" style="display:none">
-            <div class="stat-card"><div class="stat-val azul"  id="st-total">0</div><div class="stat-lbl">Folhas</div></div>
-            <div class="stat-card"><div class="stat-val verde" id="st-media">—</div><div class="stat-lbl">Média</div></div>
-            <div class="stat-card"><div class="stat-val warn"  id="st-erros">0</div><div class="stat-lbl">Sem leitura</div></div>
-        </div>
+    <button class="btn-primary" id="btn-copiar" onclick="copiarThresh()" disabled>📋 Copiar threshold final</button>
+</aside>
 
-        <div class="table-wrap">
-            <div class="empty-state" id="empty-state">
-                <div class="ei">📋</div>
-                <p>Faça o upload do PDF<br>e clique em <strong>PROCESSAR</strong></p>
-            </div>
-            <table id="tabela" style="display:none">
-                <thead>
-                    <tr>
-                        <th>#</th><th>Prévia</th><th>Aluno</th>
-                        <th>Nota</th><th>%</th><th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-            </table>
-        </div>
-    </main>
+<div class="canvas-area" id="canvas-area">
+    <div class="loading" id="loading">Processando...</div>
+    <canvas id="canvas"></canvas>
+    <div class="zoom-bar">
+        <button class="zbtn" onclick="setZoom(escala-0.25)">−</button>
+        <span class="zlbl" id="zoom-lbl">100%</span>
+        <button class="zbtn" onclick="setZoom(escala+0.25)">+</button>
+        <button class="zbtn" onclick="zoomFit()">⊡</button>
+    </div>
 </div>
 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// Calibração: offsets absolutos por coluna (A B C D E) — não assume gapH uniforme
+// ── Calibração ──
 const cfg = {
-    colsX:    [-1.915, -1.573, -1.154, -0.598, -0.036], // offset normalizado de cada coluna
+    colsX:    [-1.915, -1.573, -1.154, -0.598, -0.036],
     offsetY:   0.883,
     gapV:      0.435,
-    colGap:    1.680,
-    threshold: 30   // baixo para fotos Google Drive (imagem mais clara)
+    threshold: 30
 };
 
-let pdfFile = null;
+let imgAtual = null, qrAtual = null;
+let pdfDoc = null, pagAtual = 1, totalPags = 1;
+let escala = 1;
 
-document.getElementById('file-input').addEventListener('change', e => setPDF(e.target.files[0]));
-const zone = document.getElementById('upload-zone');
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
-zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
-zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.classList.remove('drag');
-    const f = e.dataTransfer.files[0];
-    if (f?.type === 'application/pdf') setPDF(f);
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d', { willReadFrequently:true });
+
+// ── Upload ──
+document.getElementById('file-input').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    document.getElementById('upload-lbl').innerText = f.name;
+    document.getElementById('upload-sub').innerText = 'Carregando...';
+    if (f.type === 'application/pdf') await abrirPDF(f);
+    else await abrirImagem(f);
 });
 
-function setPDF(f) {
-    pdfFile = f;
-    document.getElementById('upload-label').innerText = f.name;
-    document.getElementById('upload-sub').innerText   = 'Pronto para processar';
-    document.getElementById('btn-proc').disabled = false;
+const zone = document.getElementById('canvas-area');
+zone.addEventListener('dragover', e => e.preventDefault());
+zone.addEventListener('drop', async e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    if (f.type === 'application/pdf') await abrirPDF(f);
+    else await abrirImagem(f);
+});
+
+async function abrirPDF(f) {
+    const buf = await f.arrayBuffer();
+    pdfDoc    = await pdfjsLib.getDocument({ data: buf }).promise;
+    totalPags = pdfDoc.numPages;
+    pagAtual  = 1;
+    document.getElementById('pag-lbl').innerText = `${pagAtual} / ${totalPags}`;
+    document.getElementById('btn-prev').disabled = true;
+    document.getElementById('btn-next').disabled = totalPags <= 1;
+    await renderPag(pagAtual);
 }
 
-function setProgress(pct, txt) {
-    document.getElementById('prog-wrap').classList.add('visivel');
-    document.getElementById('prog-fill').style.width = pct + '%';
-    document.getElementById('prog-label').innerText  = txt;
+async function abrirImagem(f) {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = async () => {
+        const off  = new OffscreenCanvas(img.width, img.height);
+        off.getContext('2d').drawImage(img, 0, 0);
+        imgAtual = off.getContext('2d').getImageData(0, 0, img.width, img.height);
+        URL.revokeObjectURL(url);
+        aposCarregar();
+    };
+    img.src = url;
 }
 
-async function renderPage(page, scale = 2.0) {
-    const vp  = page.getViewport({ scale });
-    const off = new OffscreenCanvas(vp.width, vp.height);
+async function renderPag(n) {
+    mostrarLoading(true);
+    const page = await pdfDoc.getPage(n);
+    const vp   = page.getViewport({ scale: 2.0 });
+    const off  = new OffscreenCanvas(vp.width, vp.height);
     await page.render({ canvasContext: off.getContext('2d'), viewport: vp }).promise;
-    return off.getContext('2d').getImageData(0, 0, vp.width, vp.height);
+    imgAtual = off.getContext('2d').getImageData(0, 0, vp.width, vp.height);
+    aposCarregar();
+    mostrarLoading(false);
 }
 
-async function makeThumb(page) {
-    const vp  = page.getViewport({ scale: 0.12 });
-    const off = new OffscreenCanvas(vp.width, vp.height);
-    await page.render({ canvasContext: off.getContext('2d'), viewport: vp }).promise;
-    return URL.createObjectURL(await off.convertToBlob({ type:'image/jpeg', quality:.7 }));
+function aposCarregar() {
+    canvas.width  = imgAtual.width;
+    canvas.height = imgAtual.height;
+    ctx.putImageData(imgAtual, 0, 0);
+    qrAtual = jsQR(imgAtual.data, imgAtual.width, imgAtual.height);
+    atualizarQRInfo();
+    zoomFit();
+    redesenhar();
 }
 
-function lerBolinhas(qr, imgData) {
-    const match = qr.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-    if (!match) return null;
-    const nome = match[1], gabarito = match[2];
+function mudarPag(d) {
+    const n = pagAtual + d;
+    if (n < 1 || n > totalPags) return;
+    pagAtual = n;
+    document.getElementById('pag-lbl').innerText  = `${pagAtual} / ${totalPags}`;
+    document.getElementById('btn-prev').disabled  = pagAtual <= 1;
+    document.getElementById('btn-next').disabled  = pagAtual >= totalPags;
+    renderPag(pagAtual);
+}
 
-    const tl = qr.location.topLeftCorner,    tr = qr.location.topRightCorner;
-    const bl = qr.location.bottomLeftCorner, br = qr.location.bottomRightCorner;
+// ── Info QR ──
+function atualizarQRInfo() {
+    const el = document.getElementById('qr-info');
+    if (!qrAtual) { el.innerHTML = '<span class="err">❌ QR não encontrado</span>'; return; }
+    const m = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+    if (!m) { el.innerHTML = `<span class="err">❌ Formato inválido</span><br><span class="muted">${qrAtual.data.slice(0,30)}</span>`; return; }
+    el.innerHTML = `<span class="ok">✓ QR lido</span><br><span class="muted">Aluno: </span>${m[1]}<br><span class="muted">Gabarito: </span>${m[2]}<br><span class="muted">Questões: </span>${m[2].length}`;
+}
+
+// ── Threshold ──
+function atualizarThresh(v) {
+    cfg.threshold = parseInt(v);
+    document.getElementById('v-thresh').innerText = v;
+    if (imgAtual) redesenhar();
+}
+
+// ── Redesenha ──
+function redesenhar() {
+    if (!imgAtual) return;
+    ctx.putImageData(imgAtual, 0, 0);
+    if (!qrAtual) return;
+
+    const m = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+    if (!m) return;
+    const gabarito = m[2], nome = m[1];
+
+    const tl = qrAtual.location.topLeftCorner,    tr = qrAtual.location.topRightCorner;
+    const bl = qrAtual.location.bottomLeftCorner, br = qrAtual.location.bottomRightCorner;
     const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
     const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
     const size = (qrW + qrH) / 2;
@@ -202,116 +276,112 @@ function lerBolinhas(qr, imgData) {
     const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
     const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
 
-    const d = imgData.data, W = imgData.width, H = imgData.height;
-    const AM = Math.max(3, Math.round(size * 0.04));
+    // QR border
+    ctx.strokeStyle = '#ffd600'; ctx.lineWidth = Math.max(2, size*0.02);
+    ctx.beginPath();
+    ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
+    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
+    ctx.closePath(); ctx.stroke();
+
+    const d = imgAtual.data, W = imgAtual.width, H = imgAtual.height;
+    const R  = Math.max(8, Math.round(size * 0.055));
+    const AM = Math.max(3, Math.round(R * 0.5));
     let acertos = 0;
 
     for (let i = 0; i < gabarito.length; i++) {
-        const col = Math.floor(i/30), lin = i%30;
-        const ny  = cfg.offsetY + lin*cfg.gapV + col*0; // colGap não usado aqui
+        const lin = i % 30;
+        const ny  = cfg.offsetY + lin * cfg.gapV;
         let marcada = -1, maxEsc = 0;
 
+        // Detecta marcada
         for (let alt = 0; alt < 5; alt++) {
             const nx = cfg.colsX[alt];
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
-            if (x < 0 || x >= W || y < 0 || y >= H) continue;
-
-            let esc = 0, cnt = 0;
-            for (let dx=-AM; dx<=AM; dx++) for (let dy=-AM; dy<=AM; dy++) {
-                const px = Math.min(Math.max(Math.floor(x+dx),0),W-1);
-                const py = Math.min(Math.max(Math.floor(y+dy),0),H-1);
-                const idx = (py*W+px)*4;
-                esc += 255 - ((d[idx]+d[idx+1]+d[idx+2])/3);
+            if (x<0||x>=W||y<0||y>=H) continue;
+            let esc=0, cnt=0;
+            for (let dx=-AM;dx<=AM;dx++) for (let dy=-AM;dy<=AM;dy++) {
+                const px=Math.min(Math.max(Math.floor(x+dx),0),W-1);
+                const py=Math.min(Math.max(Math.floor(y+dy),0),H-1);
+                const idx=(py*W+px)*4;
+                esc += 255-((d[idx]+d[idx+1]+d[idx+2])/3);
                 cnt++;
             }
-            esc /= cnt;
+            esc/=cnt;
             if (esc > cfg.threshold && esc > maxEsc) { maxEsc=esc; marcada=alt; }
         }
+
+        // Desenha todas as bolinhas
+        for (let alt = 0; alt < 5; alt++) {
+            const nx = cfg.colsX[alt];
+            const x  = cx + nx*size*ux + ny*size*vx;
+            const y  = cy + nx*size*uy + ny*size*vy;
+            if (x<-100||x>W+100||y<-100||y>H+100) continue;
+
+            const correta = String.fromCharCode(65+alt) === gabarito[i];
+            const marcadaEsta = alt === marcada;
+
+            ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2);
+            ctx.fillStyle = marcadaEsta
+                ? (correta ? 'rgba(0,255,157,.85)' : 'rgba(255,61,90,.85)')
+                : 'rgba(255,255,255,.18)';
+            ctx.fill();
+            ctx.strokeStyle = marcadaEsta ? (correta?'#00ff9d':'#ff3d5a') : 'rgba(255,255,255,.2)';
+            ctx.lineWidth = 1.5; ctx.stroke();
+
+            ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,.55)';
+            ctx.font = `bold ${Math.max(8, Math.round(R*.8))}px monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String.fromCharCode(65+alt), x, y);
+        }
+
+        // Número da questão
+        const nx0 = cfg.colsX[0] - 0.35;
+        const xn = cx + nx0*size*ux + ny*size*vx;
+        const yn = cy + nx0*size*uy + ny*size*vy;
+        ctx.fillStyle = 'rgba(0,229,255,.7)';
+        ctx.font = `bold ${Math.max(7, Math.round(R*.65))}px monospace`;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(i+1).padStart(2,'0'), xn, yn);
+
         if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
     }
 
-    return { nome, gabarito, acertos, total: gabarito.length };
+    document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
+    document.getElementById('res-nome').innerText = nome;
+    document.getElementById('btn-copiar').disabled = false;
+    aplicarZoom();
 }
 
-let resultados = [];
-
-async function processar() {
-    if (!pdfFile) return;
-    document.getElementById('btn-proc').disabled = true;
-    resultados = [];
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('tabela').style.display      = 'none';
-    document.getElementById('tbody').innerHTML           = '';
-    document.getElementById('stats-row').style.display  = 'none';
-
-    const pdf   = await pdfjsLib.getDocument({ data: await pdfFile.arrayBuffer() }).promise;
-    const total = pdf.numPages;
-
-    for (let p = 1; p <= total; p++) {
-        setProgress(Math.round((p-1)/total*100), `Página ${p} de ${total}...`);
-        const page     = await pdf.getPage(p);
-        const imgData  = await renderPage(page, 2.0);
-        const thumbURL = await makeThumb(page);
-        const code     = jsQR(imgData.data, imgData.width, imgData.height);
-        const resultado = (code && code.data.includes('|GB:')) ? lerBolinhas(code, imgData) : null;
-        resultados.push({ pagina:p, resultado, thumbURL });
-        adicionarLinha(p, resultado, thumbURL);
-    }
-
-    setProgress(100, `✅ ${total} páginas processadas.`);
-    document.getElementById('tabela').style.display = 'table';
-    atualizarStats();
-    document.getElementById('btn-csv').disabled  = false;
-    document.getElementById('btn-proc').disabled = false;
+// ── Zoom ──
+function setZoom(z) {
+    escala = Math.max(0.1, Math.min(4, z));
+    canvas.style.transform = `scale(${escala})`;
+    canvas.style.transformOrigin = 'top left';
+    canvas.style.margin = '16px';
+    document.getElementById('zoom-lbl').innerText = Math.round(escala*100)+'%';
+}
+function zoomFit() {
+    const a = document.getElementById('canvas-area');
+    setZoom(Math.min((a.clientWidth-32)/canvas.width, (a.clientHeight-32)/canvas.height, 1));
+}
+function aplicarZoom() {
+    canvas.style.transform = `scale(${escala})`;
+    canvas.style.transformOrigin = 'top left';
+    canvas.style.margin = '16px';
 }
 
-function adicionarLinha(pag, r, thumbURL) {
-    const tr  = document.createElement('tr');
-    const num = String(pag).padStart(2,'0');
-    if (!r) {
-        tr.innerHTML = `
-            <td style="color:var(--muted);font-family:'Space Mono',monospace">${num}</td>
-            <td><div class="thumb-ph">📄</div></td>
-            <td class="td-nome" style="color:var(--muted)">Não identificado</td>
-            <td>—</td><td>—</td>
-            <td><span class="badge err">SEM QR</span></td>`;
-    } else {
-        const pct  = Math.round((r.acertos/r.total)*100);
-        const cls  = pct>=70?'alta':pct>=50?'media':'baixa';
-        const barC = pct>=70?'var(--accent2)':pct>=50?'#ffd600':'var(--danger)';
-        tr.innerHTML = `
-            <td style="color:var(--muted);font-family:'Space Mono',monospace">${num}</td>
-            <td><img class="thumb" src="${thumbURL}" alt="p${pag}"></td>
-            <td class="td-nome">${r.nome}</td>
-            <td class="td-nota ${cls}">${r.acertos}/${r.total}</td>
-            <td class="td-pct">${pct}%<span class="mini-bar"><span class="mini-bar-fill" style="width:${pct}%;background:${barC}"></span></span></td>
-            <td><span class="badge ok">OK</span></td>`;
-    }
-    document.getElementById('tbody').appendChild(tr);
-}
+// ── Loading ──
+function mostrarLoading(s) { document.getElementById('loading').classList.toggle('show', s); }
 
-function atualizarStats() {
-    const ok    = resultados.filter(r => r.resultado);
-    const erros = resultados.length - ok.length;
-    const media = ok.length
-        ? Math.round(ok.reduce((s,r) => s + r.resultado.acertos/r.resultado.total*100, 0) / ok.length)
-        : 0;
-    document.getElementById('st-total').innerText = resultados.length;
-    document.getElementById('st-media').innerText = ok.length ? media+'%' : '—';
-    document.getElementById('st-erros').innerText = erros;
-    document.getElementById('stats-row').style.display = 'grid';
-}
-
-function exportCSV() {
-    const linhas = ['Página,Nome,Acertos,Total,Porcentagem,Gabarito'];
-    resultados.forEach(({pagina:p, resultado:r}) => {
-        if (r) linhas.push(`${p},"${r.nome}",${r.acertos},${r.total},${Math.round(r.acertos/r.total*100)}%,"${r.gabarito}"`);
-        else   linhas.push(`${p},"SEM LEITURA",,,,`);
+// ── Copiar threshold ──
+function copiarThresh() {
+    const txt = `threshold: ${cfg.threshold}`;
+    navigator.clipboard.writeText(txt).then(() => {
+        const b = document.getElementById('btn-copiar');
+        b.innerText = '✅ Copiado!';
+        setTimeout(() => b.innerText = '📋 Copiar threshold final', 2000);
     });
-    const url = URL.createObjectURL(new Blob([linhas.join('\n')], {type:'text/csv;charset=utf-8;'}));
-    Object.assign(document.createElement('a'), {href:url, download:'resultados_omr.csv'}).click();
-    URL.revokeObjectURL(url);
 }
 </script>
 </body>
