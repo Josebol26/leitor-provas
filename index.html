@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMR PDF — Correção em Lote</title>
+    <title>OMR — Calibração PDF</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -14,267 +14,276 @@
             --text:#e8f0f5; --muted:#52687a; --card:#111922;
         }
         * { box-sizing:border-box; margin:0; padding:0; }
-        html, body { height:100%; }
-        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-
-        /* ── LAYOUT ── */
-        .app { display:grid; grid-template-columns:340px 1fr; min-height:100vh; }
+        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:grid; grid-template-columns:300px 1fr; overflow:hidden; }
 
         /* ── SIDEBAR ── */
-        .sidebar {
-            background:var(--surface); border-right:1px solid var(--border);
-            padding:28px 24px; display:flex; flex-direction:column; gap:24px;
-            position:sticky; top:0; height:100vh; overflow-y:auto;
-        }
-        .brand { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.2em; color:var(--accent); text-transform:uppercase; }
+        .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:20px 18px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+        .brand { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.2em; color:var(--accent); }
         .brand span { color:var(--muted); }
-        h1 { font-size:22px; font-weight:800; line-height:1.2; }
+        h1 { font-size:18px; font-weight:800; }
         h1 em { color:var(--accent2); font-style:normal; }
 
-        /* Upload zone */
-        .upload-zone {
-            border:2px dashed var(--border); border-radius:16px;
-            padding:32px 20px; text-align:center; cursor:pointer;
-            transition:all .25s; background:var(--bg); position:relative;
-        }
-        .upload-zone:hover, .upload-zone.drag { border-color:var(--accent); background:rgba(0,229,255,.04); }
-        .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
-        .upload-icon { font-size:36px; margin-bottom:10px; }
-        .upload-label { font-size:13px; font-weight:700; color:var(--accent); }
-        .upload-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+        .sec { font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:5px; margin-bottom:8px; }
 
-        /* Config */
-        .section-title { font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px; }
-        .config-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; font-size:12px; }
-        .config-row label { width:72px; text-align:right; flex-shrink:0; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
-        .config-row input[type=range] { flex:1; accent-color:var(--accent); }
-        .config-row .cval { width:50px; font-family:'Space Mono',monospace; font-size:11px; color:var(--accent); flex-shrink:0; }
+        /* Upload */
+        .upload-zone { border:2px dashed var(--border); border-radius:12px; padding:20px 12px; text-align:center; cursor:pointer; transition:all .2s; background:var(--bg); position:relative; }
+        .upload-zone:hover { border-color:var(--accent); }
+        .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+        .upload-icon { font-size:28px; }
+        .upload-lbl { font-size:12px; font-weight:700; color:var(--accent); margin-top:4px; }
+        .upload-sub { font-size:10px; color:var(--muted); margin-top:2px; }
 
-        /* Botões sidebar */
-        .btn-proc {
-            width:100%; padding:14px; border:none; border-radius:12px;
-            background:var(--accent2); color:var(--bg);
-            font-family:'Syne',sans-serif; font-weight:800; font-size:15px;
-            cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px;
-        }
-        .btn-proc:hover { filter:brightness(1.1); }
-        .btn-proc:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; filter:none; }
-        .btn-csv {
-            width:100%; padding:12px; border:1px solid var(--border); border-radius:12px;
-            background:transparent; color:var(--text);
-            font-family:'Syne',sans-serif; font-weight:700; font-size:13px;
-            cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px;
-        }
-        .btn-csv:hover { border-color:var(--accent2); color:var(--accent2); }
-        .btn-csv:disabled { opacity:.4; cursor:not-allowed; }
+        /* Navegação de páginas */
+        .nav-row { display:flex; gap:6px; align-items:center; }
+        .nav-btn { flex:1; padding:8px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all .2s; }
+        .nav-btn:hover { border-color:var(--accent); color:var(--accent); }
+        .nav-btn:disabled { opacity:.3; cursor:not-allowed; }
+        .pag-info { font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); text-align:center; flex-shrink:0; min-width:50px; }
 
-        /* ── MAIN ── */
-        .main { padding:32px; overflow-y:auto; }
+        /* Sliders */
+        .slider-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+        .slider-row label { width:68px; text-align:right; flex-shrink:0; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
+        .slider-row input[type=range] { flex:1; accent-color:var(--accent); cursor:pointer; }
+        .slider-row .val { width:48px; font-family:'Space Mono',monospace; font-size:11px; color:var(--accent); flex-shrink:0; }
 
-        /* Progresso */
-        .progress-bar-wrap { background:var(--border); border-radius:99px; height:6px; margin-bottom:6px; overflow:hidden; display:none; }
-        .progress-bar-wrap.visivel { display:block; }
-        .progress-bar-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .3s; }
-        .progress-label { font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:24px; min-height:16px; }
+        /* Botões ação */
+        .btn-primary { width:100%; padding:12px; border:none; border-radius:10px; background:var(--accent2); color:var(--bg); font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; transition:all .2s; }
+        .btn-primary:hover { filter:brightness(1.1); }
+        .btn-primary:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; filter:none; }
+        .btn-secondary { width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all .2s; }
+        .btn-secondary:hover { border-color:var(--accent2); color:var(--accent2); }
 
-        /* Stats */
-        .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:28px; }
-        .stat-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
-        .stat-val { font-family:'Space Mono',monospace; font-size:30px; font-weight:700; line-height:1; }
-        .stat-val.verde { color:var(--accent2); }
-        .stat-val.azul  { color:var(--accent); }
-        .stat-val.warn  { color:#ffd600; }
-        .stat-lbl { font-size:11px; color:var(--muted); margin-top:4px; text-transform:uppercase; letter-spacing:.06em; }
+        /* Info QR */
+        .qr-info { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:11px; font-family:'Space Mono',monospace; line-height:1.7; }
+        .qr-info .ok  { color:var(--accent2); }
+        .qr-info .err { color:var(--danger); }
+        .qr-info .lbl { color:var(--muted); }
 
-        /* Tabela */
-        .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
-        table { width:100%; border-collapse:collapse; }
-        thead th { background:var(--surface); padding:12px 16px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; border-bottom:1px solid var(--border); }
-        tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
-        tbody tr:last-child { border-bottom:none; }
-        tbody tr:hover { background:rgba(255,255,255,.03); }
-        tbody td { padding:12px 16px; font-size:13px; vertical-align:middle; }
-        .td-nome { font-weight:700; }
-        .td-nota { font-family:'Space Mono',monospace; font-weight:700; font-size:15px; }
-        .td-nota.alta  { color:var(--accent2); }
-        .td-nota.media { color:#ffd600; }
-        .td-nota.baixa { color:var(--danger); }
-        .td-pct { font-family:'Space Mono',monospace; font-size:12px; color:var(--muted); }
+        /* Resultado */
+        .resultado-box { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+        .res-nota { font-family:'Space Mono',monospace; font-size:28px; font-weight:700; color:var(--accent2); }
+        .res-nome { font-size:11px; color:var(--muted); margin-top:2px; word-break:break-all; }
 
-        /* Mini barra na tabela */
-        .mini-bar { width:80px; height:4px; background:var(--border); border-radius:99px; overflow:hidden; display:inline-block; vertical-align:middle; margin-left:8px; }
-        .mini-bar-fill { height:100%; border-radius:99px; }
+        /* ── CANVAS AREA ── */
+        .canvas-area { position:relative; overflow:auto; background:#111; display:flex; align-items:flex-start; justify-content:flex-start; }
+        #canvas { display:block; cursor:crosshair; }
 
-        /* Badge status */
-        .badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:.05em; }
-        .badge.ok  { background:rgba(0,255,157,.15); color:var(--accent2); }
-        .badge.err { background:rgba(255,61,90,.15);  color:var(--danger); }
+        /* Zoom controls */
+        .zoom-bar { position:absolute; bottom:16px; right:16px; display:flex; gap:6px; z-index:10; }
+        .zoom-btn { width:36px; height:36px; border:1px solid var(--border); border-radius:8px; background:rgba(14,20,25,.9); color:var(--text); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+        .zoom-btn:hover { border-color:var(--accent); }
+        .zoom-label { height:36px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:rgba(14,20,25,.9); color:var(--muted); font-family:'Space Mono',monospace; font-size:11px; display:flex; align-items:center; }
 
-        /* Preview thumb */
-        .thumb-wrap { display:flex; gap:8px; align-items:center; }
-        .thumb { width:36px; height:50px; border-radius:4px; object-fit:cover; border:1px solid var(--border); flex-shrink:0; }
-        .thumb-placeholder { width:36px; height:50px; border-radius:4px; background:var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
-
-        /* Estado vazio */
-        .empty-state { text-align:center; padding:80px 20px; color:var(--muted); }
-        .empty-state .ei { font-size:56px; margin-bottom:16px; opacity:.4; }
-        .empty-state p { font-size:14px; }
-
-        @media (max-width: 700px) {
-            .app { grid-template-columns:1fr; }
-            .sidebar { position:static; height:auto; }
-        }
+        /* Legenda */
+        .legenda { display:flex; gap:10px; flex-wrap:wrap; font-size:10px; }
+        .leg-item { display:flex; align-items:center; gap:4px; }
+        .leg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
     </style>
 </head>
 <body>
-<div class="app">
 
-    <!-- ── SIDEBAR ── -->
-    <aside class="sidebar">
-        <div>
-            <div class="brand">OMR<span>/</span>PDF</div>
-            <h1 style="margin-top:8px">Correção<br>em <em>Lote</em></h1>
-        </div>
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar">
+    <div>
+        <div class="brand">OMR<span>/</span>CALIB</div>
+        <h1 style="margin-top:6px">Calibração<br><em>Visual</em></h1>
+    </div>
 
-        <!-- Upload -->
-        <div>
-            <div class="section-title">Arquivo PDF</div>
-            <div class="upload-zone" id="upload-zone">
-                <input type="file" accept="application/pdf" id="file-input">
-                <div class="upload-icon">📄</div>
-                <div class="upload-label" id="upload-label">Clique ou arraste o PDF</div>
-                <div class="upload-sub" id="upload-sub">Uma folha por página</div>
-            </div>
+    <!-- Upload -->
+    <div>
+        <div class="sec">Arquivo PDF</div>
+        <div class="upload-zone" id="upload-zone">
+            <input type="file" accept="application/pdf" id="file-input">
+            <div class="upload-icon">📄</div>
+            <div class="upload-lbl" id="upload-lbl">Clique para abrir PDF</div>
+            <div class="upload-sub" id="upload-sub">Qualquer página com cartão</div>
         </div>
+    </div>
 
-        <!-- Config calibração -->
-        <div>
-            <div class="section-title">Calibração</div>
-            <div class="config-row"><label>Offset X</label><input type="range" min="-4" max="0" step="0.005" value="-2.175" oninput="C('offsetX',this,3,'vX')"><span class="cval" id="vX">-2.175</span></div>
-            <div class="config-row"><label>Offset Y</label><input type="range" min="-1" max="3"  step="0.005" value="1.560"  oninput="C('offsetY',this,3,'vY')"><span class="cval" id="vY">1.560</span></div>
-            <div class="config-row"><label>Gap H</label>   <input type="range" min="0.1" max="1.0" step="0.001" value="0.611" oninput="C('gapH',this,3,'vGH')"><span class="cval" id="vGH">0.611</span></div>
-            <div class="config-row"><label>Gap V</label>   <input type="range" min="0.1" max="0.8" step="0.001" value="0.335" oninput="C('gapV',this,3,'vGV')"><span class="cval" id="vGV">0.335</span></div>
-            <div class="config-row"><label>Col Gap</label> <input type="range" min="0.5" max="3.0" step="0.005" value="1.680" oninput="C('colGap',this,3,'vCG')"><span class="cval" id="vCG">1.680</span></div>
-            <div class="config-row"><label>Threshold</label><input type="range" min="30" max="250" step="1" value="81" oninput="C('threshold',this,0,'vTH')"><span class="cval" id="vTH">81</span></div>
+    <!-- Navegação de páginas -->
+    <div>
+        <div class="sec">Página</div>
+        <div class="nav-row">
+            <button class="nav-btn" id="btn-prev" onclick="mudarPag(-1)" disabled>◀</button>
+            <span class="pag-info" id="pag-info">— / —</span>
+            <button class="nav-btn" id="btn-next" onclick="mudarPag(+1)" disabled>▶</button>
         </div>
+    </div>
 
-        <!-- Ações -->
-        <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto">
-            <button class="btn-proc" id="btn-proc" onclick="processar()" disabled>
-                ▶ PROCESSAR PDF
-            </button>
-            <button class="btn-csv" id="btn-csv" onclick="exportCSV()" disabled>
-                ⬇️ Exportar CSV
-            </button>
+    <!-- Info QR -->
+    <div>
+        <div class="sec">QR Code</div>
+        <div class="qr-info" id="qr-info">
+            <span class="err">Nenhuma página carregada</span>
         </div>
-    </aside>
+    </div>
 
-    <!-- ── MAIN ── -->
-    <main class="main">
-        <div class="progress-bar-wrap" id="prog-wrap">
-            <div class="progress-bar-fill" id="prog-fill" style="width:0%"></div>
-        </div>
-        <div class="progress-label" id="prog-label"></div>
+    <!-- Sliders calibração -->
+    <div>
+        <div class="sec">Posição</div>
+        <div class="slider-row"><label>Offset X</label><input type="range" id="s_oX" min="-4" max="0" step="0.005" value="-2.175" oninput="upd('offsetX',this,3,'v_oX')"><span class="val" id="v_oX">-2.175</span></div>
+        <div class="slider-row"><label>Offset Y</label><input type="range" id="s_oY" min="-1" max="3"  step="0.005" value="1.560"  oninput="upd('offsetY',this,3,'v_oY')"><span class="val" id="v_oY">1.560</span></div>
+        <div class="sec" style="margin-top:4px">Espaçamento</div>
+        <div class="slider-row"><label>Gap H</label>   <input type="range" id="s_gH" min="0.1" max="1.0" step="0.001" value="0.611" oninput="upd('gapH',this,3,'v_gH')"><span class="val" id="v_gH">0.611</span></div>
+        <div class="slider-row"><label>Gap V</label>   <input type="range" id="s_gV" min="0.1" max="0.8" step="0.001" value="0.335" oninput="upd('gapV',this,3,'v_gV')"><span class="val" id="v_gV">0.335</span></div>
+        <div class="slider-row"><label>Col Gap</label> <input type="range" id="s_cG" min="0.5" max="3.0" step="0.005" value="1.680" oninput="upd('colGap',this,3,'v_cG')"><span class="val" id="v_cG">1.680</span></div>
+        <div class="sec" style="margin-top:4px">Detecção</div>
+        <div class="slider-row"><label>Threshold</label><input type="range" id="s_th" min="30" max="250" step="1" value="81" oninput="upd('threshold',this,0,'v_th')"><span class="val" id="v_th">81</span></div>
+    </div>
 
-        <!-- Stats -->
-        <div class="stats-row" id="stats-row" style="display:none">
-            <div class="stat-card">
-                <div class="stat-val azul" id="st-total">0</div>
-                <div class="stat-lbl">Folhas</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-val verde" id="st-media">—</div>
-                <div class="stat-lbl">Média %</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-val warn" id="st-erros">0</div>
-                <div class="stat-lbl">Sem leitura</div>
-            </div>
+    <!-- Legenda -->
+    <div>
+        <div class="sec">Legenda</div>
+        <div class="legenda">
+            <div class="leg-item"><div class="leg-dot" style="background:#00ff9d"></div> Marcada correta</div>
+            <div class="leg-item"><div class="leg-dot" style="background:#ff3d5a"></div> Marcada errada</div>
+            <div class="leg-item"><div class="leg-dot" style="background:rgba(255,255,255,.25)"></div> Vazia</div>
+            <div class="leg-item"><div class="leg-dot" style="background:#ffd600;border-radius:2px"></div> Contorno QR</div>
         </div>
+    </div>
 
-        <!-- Tabela -->
-        <div class="table-wrap" id="table-wrap">
-            <div class="empty-state" id="empty-state">
-                <div class="ei">📋</div>
-                <p>Faça o upload do PDF e clique em<br><strong>PROCESSAR PDF</strong></p>
-            </div>
-            <table id="tabela" style="display:none">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Prévia</th>
-                        <th>Aluno</th>
-                        <th>Nota</th>
-                        <th>%</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-            </table>
+    <!-- Resultado -->
+    <div>
+        <div class="sec">Resultado desta página</div>
+        <div class="resultado-box">
+            <div class="res-nota" id="res-nota">— / —</div>
+            <div class="res-nome" id="res-nome">Processe uma página</div>
         </div>
-    </main>
+    </div>
+
+    <!-- Ações -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
+        <button class="btn-primary" id="btn-redesenhar" onclick="redesenhar()" disabled>↺ REDESENHAR</button>
+        <button class="btn-secondary" id="btn-copiar" onclick="copiarConfig()">📋 Copiar valores finais</button>
+    </div>
+</aside>
+
+<!-- ── CANVAS ── -->
+<div class="canvas-area" id="canvas-area">
+    <canvas id="canvas"></canvas>
+    <div class="zoom-bar">
+        <button class="zoom-btn" onclick="zoom(-0.25)">−</button>
+        <span class="zoom-label" id="zoom-label">100%</span>
+        <button class="zoom-btn" onclick="zoom(+0.25)">+</button>
+        <button class="zoom-btn" onclick="zoomFit()" title="Ajustar à tela">⊡</button>
+    </div>
 </div>
 
 <script>
-// ── PDF.js worker ──
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// ── Config ──
-const cfg = {
-    offsetX:-2.175, offsetY:1.560,
-    gapH:0.611,     gapV:0.335,
-    colGap:1.680,   threshold:81
-};
-function C(k,el,dec,spanId) {
-    cfg[k] = parseFloat(el.value);
-    document.getElementById(spanId).innerText = cfg[k].toFixed(dec);
+// ── Estado ──
+const cfg = { offsetX:-2.175, offsetY:1.560, gapH:0.611, gapV:0.335, colGap:1.680, threshold:81 };
+let pdfDoc    = null;
+let pagAtual  = 1;
+let totalPags = 0;
+let imgAtual  = null;   // ImageData da página atual (escala 2.5)
+let qrAtual   = null;   // jsQR result
+let escalaZoom = 1;
+let escalaRender = 2.5; // resolução interna
+
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d', { willReadFrequently:true });
+
+// ── Sliders ──
+function upd(key, el, dec, spanId) {
+    cfg[key] = parseFloat(el.value);
+    document.getElementById(spanId).innerText = cfg[key].toFixed(dec);
+    if (imgAtual) redesenhar();
 }
 
-// ── Upload ──
-let pdfFile = null;
-const fileInput    = document.getElementById('file-input');
-const uploadZone   = document.getElementById('upload-zone');
-const uploadLabel  = document.getElementById('upload-label');
-const uploadSub    = document.getElementById('upload-sub');
-const btnProc      = document.getElementById('btn-proc');
-
-fileInput.addEventListener('change', e => setPDF(e.target.files[0]));
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
-uploadZone.addEventListener('drop', e => {
-    e.preventDefault(); uploadZone.classList.remove('drag');
-    const f = e.dataTransfer.files[0];
-    if (f && f.type === 'application/pdf') setPDF(f);
+// ── Upload PDF ──
+document.getElementById('file-input').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    document.getElementById('upload-lbl').innerText = f.name;
+    document.getElementById('upload-sub').innerText = 'Carregando...';
+    const buf = await f.arrayBuffer();
+    pdfDoc    = await pdfjsLib.getDocument({ data: buf }).promise;
+    totalPags = pdfDoc.numPages;
+    pagAtual  = 1;
+    document.getElementById('upload-sub').innerText = `${totalPags} página(s)`;
+    atualizarNavBtns();
+    await carregarPagina(pagAtual);
 });
 
-function setPDF(f) {
-    pdfFile = f;
-    uploadLabel.innerText = f.name;
-    uploadSub.innerText   = 'Pronto para processar';
-    btnProc.disabled = false;
+// ── Navegação ──
+function mudarPag(delta) {
+    const nova = pagAtual + delta;
+    if (nova < 1 || nova > totalPags) return;
+    pagAtual = nova;
+    atualizarNavBtns();
+    carregarPagina(pagAtual);
+}
+function atualizarNavBtns() {
+    document.getElementById('pag-info').innerText  = `${pagAtual} / ${totalPags}`;
+    document.getElementById('btn-prev').disabled   = pagAtual <= 1;
+    document.getElementById('btn-next').disabled   = pagAtual >= totalPags;
 }
 
-// ── Progresso ──
-function setProgress(pct, txt) {
-    document.getElementById('prog-wrap').classList.add('visivel');
-    document.getElementById('prog-fill').style.width = pct + '%';
-    document.getElementById('prog-label').innerText  = txt;
-}
+// ── Carrega e renderiza página ──
+async function carregarPagina(n) {
+    document.getElementById('qr-info').innerHTML = '<span style="color:var(--muted)">Carregando...</span>';
+    document.getElementById('res-nota').innerText = '— / —';
+    document.getElementById('res-nome').innerText = '';
 
-// ── Renderiza página PDF → ImageData ──
-async function renderizarPagina(page, scale = 2.5) {
-    const vp  = page.getViewport({ scale });
-    const off = new OffscreenCanvas(vp.width, vp.height);
+    const page = await pdfDoc.getPage(n);
+    const vp   = page.getViewport({ scale: escalaRender });
+
+    // Renderiza em OffscreenCanvas (alta res)
+    const off  = new OffscreenCanvas(vp.width, vp.height);
     const ctx2 = off.getContext('2d');
-    await page.render({ canvasContext: ctx2, viewport: vp }).promise;
-    return ctx2.getImageData(0, 0, vp.width, vp.height);
+    await page.render({ canvasContext:ctx2, viewport:vp }).promise;
+    imgAtual = ctx2.getImageData(0, 0, vp.width, vp.height);
+
+    // Tenta ler QR
+    qrAtual = jsQR(imgAtual.data, imgAtual.width, imgAtual.height);
+    atualizarQRInfo();
+
+    // Ajusta canvas e desenha
+    canvas.width  = imgAtual.width;
+    canvas.height = imgAtual.height;
+    zoomFit();
+    redesenhar();
+
+    document.getElementById('btn-redesenhar').disabled = false;
 }
 
-// ── Lê bolinhas usando QR como âncora ──
-function lerBolinhas(qr, imgData) {
-    const tl = qr.location.topLeftCorner,    tr = qr.location.topRightCorner;
-    const bl = qr.location.bottomLeftCorner, br = qr.location.bottomRightCorner;
+// ── Info do QR ──
+function atualizarQRInfo() {
+    const el = document.getElementById('qr-info');
+    if (!qrAtual) {
+        el.innerHTML = '<span class="err">❌ QR não encontrado</span>';
+        return;
+    }
+    const match = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+    if (!match) {
+        el.innerHTML = `<span class="err">❌ Formato inválido</span><br><span class="lbl">${qrAtual.data.substring(0,40)}</span>`;
+        return;
+    }
+    el.innerHTML = `
+        <span class="ok">✓ QR lido</span><br>
+        <span class="lbl">Aluno: </span>${match[1]}<br>
+        <span class="lbl">Gabarito: </span>${match[2]}<br>
+        <span class="lbl">Questões: </span>${match[2].length}`;
+}
+
+// ── Redesenha bolinhas sobre a imagem ──
+function redesenhar() {
+    if (!imgAtual) return;
+
+    // Copia imagem original
+    ctx.putImageData(imgAtual, 0, 0);
+
+    if (!qrAtual) return;
+
+    const match = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
+    if (!match) return;
+    const gabarito = match[2], nome = match[1];
+
+    const tl = qrAtual.location.topLeftCorner,    tr = qrAtual.location.topRightCorner;
+    const bl = qrAtual.location.bottomLeftCorner, br = qrAtual.location.bottomRightCorner;
     const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
     const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
     const size = (qrW + qrH) / 2;
@@ -282,14 +291,17 @@ function lerBolinhas(qr, imgData) {
     const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
     const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
 
-    const d = imgData.data, W = imgData.width, H = imgData.height;
+    // Contorno QR
+    ctx.strokeStyle = '#ffd600';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
+    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
+    ctx.closePath(); ctx.stroke();
 
-    const match = qr.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-    if (!match) return null;
-    const nome = match[1], gabarito = match[2];
-
+    const d = imgAtual.data, W = imgAtual.width, H = imgAtual.height;
     let acertos = 0;
-    const detalhes = []; // {questao, marcada, correta, acertou}
+    const R = Math.round(size * 0.06); // raio das bolinhas proporcional ao QR
 
     for (let i = 0; i < gabarito.length; i++) {
         const col = Math.floor(i/30), lin = i%30;
@@ -303,136 +315,94 @@ function lerBolinhas(qr, imgData) {
             const y  = cy + nx*size*uy + ny*size*vy;
             if (x<1||x>W-2||y<1||y>H-2) continue;
 
-            let esc = 0;
-            for (let dx=-1;dx<=1;dx++) for (let dy=-1;dy<=1;dy++) {
-                const px=Math.floor(x+dx), py=Math.floor(y+dy);
+            // Amostra área maior para PDF de alta res
+            let esc = 0, count = 0;
+            const am = Math.max(1, Math.round(R * 0.6));
+            for (let dx=-am;dx<=am;dx++) for (let dy=-am;dy<=am;dy++) {
+                const px=Math.min(Math.max(Math.floor(x+dx),0),W-1);
+                const py=Math.min(Math.max(Math.floor(y+dy),0),H-1);
                 const idx=(py*W+px)*4;
                 esc += 255-((d[idx]+d[idx+1]+d[idx+2])/3);
+                count++;
             }
-            esc /= 9;
+            esc /= count;
+
             if (esc > cfg.threshold && esc > maxEsc) { maxEsc=esc; marcada=alt; }
         }
 
-        const letraMarcada = marcada >= 0 ? String.fromCharCode(65+marcada) : '?';
-        const acertou = letraMarcada === gabarito[i];
-        if (acertou) acertos++;
-        detalhes.push({ q:i+1, marcada:letraMarcada, correta:gabarito[i], acertou });
-    }
+        // Desenha todas as bolinhas
+        for (let alt = 0; alt < 5; alt++) {
+            const nx = bx + alt*cfg.gapH, ny = by;
+            const x  = cx + nx*size*ux + ny*size*vx;
+            const y  = cy + nx*size*uy + ny*size*vy;
+            if (x<1||x>W-2||y<1||y>H-2) continue;
 
-    return { nome, gabarito, acertos, total:gabarito.length, detalhes };
-}
+            const correta     = String.fromCharCode(65+alt) === gabarito[i];
+            const estaMarcada = alt === marcada;
 
-// ── Gera thumbnail da página ──
-async function gerarThumb(page) {
-    const vp  = page.getViewport({ scale: 0.15 });
-    const off = new OffscreenCanvas(vp.width, vp.height);
-    const ctx2 = off.getContext('2d');
-    await page.render({ canvasContext:ctx2, viewport:vp }).promise;
-    const blob = await off.convertToBlob({ type:'image/jpeg', quality:0.7 });
-    return URL.createObjectURL(blob);
-}
+            ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2);
+            if (estaMarcada) {
+                ctx.fillStyle = correta ? 'rgba(0,255,157,.85)' : 'rgba(255,61,90,.85)';
+            } else {
+                ctx.fillStyle = 'rgba(255,255,255,.2)';
+            }
+            ctx.fill();
 
-// ── PROCESSAR ──
-let resultados = [];
-
-async function processar() {
-    if (!pdfFile) return;
-    btnProc.disabled = true;
-    resultados = [];
-
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('tabela').style.display = 'none';
-    document.getElementById('tbody').innerHTML = '';
-    document.getElementById('stats-row').style.display = 'none';
-
-    const arrayBuf = await pdfFile.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-    const total = pdf.numPages;
-
-    setProgress(0, `Processando 0 de ${total} páginas...`);
-
-    for (let p = 1; p <= total; p++) {
-        setProgress(Math.round((p-1)/total*100), `Página ${p} de ${total}...`);
-
-        const page    = await pdf.getPage(p);
-        const imgData = await renderizarPagina(page, 2.5);
-        const thumbURL = await gerarThumb(page);
-
-        // Detecta QR
-        const code = jsQR(imgData.data, imgData.width, imgData.height);
-        let resultado = null;
-
-        if (code && code.data.includes('|GB:')) {
-            resultado = lerBolinhas(code, imgData);
+            // Letra dentro da bolinha
+            ctx.fillStyle = estaMarcada ? '#080c10' : 'rgba(255,255,255,.6)';
+            ctx.font = `bold ${Math.max(8, Math.round(R*0.9))}px monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String.fromCharCode(65+alt), x, y);
         }
 
-        resultados.push({ pagina: p, resultado, thumbURL });
-        adicionarLinha(p, resultado, thumbURL);
+        if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
     }
 
-    setProgress(100, `✅ ${total} páginas processadas.`);
-    document.getElementById('tabela').style.display = 'table';
-    atualizarStats();
-    document.getElementById('btn-csv').disabled = false;
-    btnProc.disabled = false;
-}
-
-// ── Adiciona linha na tabela ──
-function adicionarLinha(pag, r, thumb) {
-    const tbody = document.getElementById('tbody');
-    const tr = document.createElement('tr');
-
-    if (!r) {
-        tr.innerHTML = `
-            <td style="color:var(--muted);font-family:'Space Mono',monospace">${String(pag).padStart(2,'0')}</td>
-            <td><div class="thumb-placeholder">📄</div></td>
-            <td class="td-nome" style="color:var(--muted)">Não identificado</td>
-            <td>—</td><td>—</td>
-            <td><span class="badge err">SEM QR</span></td>`;
-    } else {
-        const pct  = Math.round((r.acertos/r.total)*100);
-        const cls  = pct >= 70 ? 'alta' : pct >= 50 ? 'media' : 'baixa';
-        const barC = pct >= 70 ? 'var(--accent2)' : pct >= 50 ? '#ffd600' : 'var(--danger)';
-        tr.innerHTML = `
-            <td style="color:var(--muted);font-family:'Space Mono',monospace">${String(pag).padStart(2,'0')}</td>
-            <td><img class="thumb" src="${thumb}" alt="pg${pag}"></td>
-            <td class="td-nome">${r.nome}</td>
-            <td class="td-nota ${cls}">${r.acertos}/${r.total}</td>
-            <td class="td-pct">
-                ${pct}%
-                <span class="mini-bar"><span class="mini-bar-fill" style="width:${pct}%;background:${barC}"></span></span>
-            </td>
-            <td><span class="badge ok">OK</span></td>`;
+    // Número da questão à esquerda da linha
+    for (let i = 0; i < gabarito.length; i++) {
+        const col = Math.floor(i/30), lin = i%30;
+        const bx  = cfg.offsetX + col*cfg.colGap - cfg.gapH*0.8;
+        const by  = cfg.offsetY + lin*cfg.gapV;
+        const x   = cx + bx*size*ux + by*size*vx;
+        const y   = cy + bx*size*uy + by*size*vy;
+        ctx.fillStyle = 'rgba(0,229,255,.7)';
+        ctx.font = `bold ${Math.max(7, Math.round(R*0.75))}px monospace`;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(i+1).padStart(2,'0'), x, y);
     }
-    tbody.appendChild(tr);
+
+    document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
+    document.getElementById('res-nome').innerText = nome;
+    aplicarZoom();
 }
 
-// ── Estatísticas ──
-function atualizarStats() {
-    const ok     = resultados.filter(r => r.resultado);
-    const erros  = resultados.length - ok.length;
-    const medPct = ok.length
-        ? Math.round(ok.reduce((s,r) => s + r.resultado.acertos/r.resultado.total*100, 0) / ok.length)
-        : 0;
-
-    document.getElementById('st-total').innerText = resultados.length;
-    document.getElementById('st-media').innerText = ok.length ? medPct + '%' : '—';
-    document.getElementById('st-erros').innerText = erros;
-    document.getElementById('stats-row').style.display = 'grid';
+// ── Zoom ──
+function zoom(delta) {
+    escalaZoom = Math.max(0.25, Math.min(4, escalaZoom + delta));
+    aplicarZoom();
+}
+function zoomFit() {
+    const area = document.getElementById('canvas-area');
+    const scaleX = (area.clientWidth  - 32) / canvas.width;
+    const scaleY = (area.clientHeight - 32) / canvas.height;
+    escalaZoom = Math.min(scaleX, scaleY, 1);
+    aplicarZoom();
+}
+function aplicarZoom() {
+    canvas.style.transform = `scale(${escalaZoom})`;
+    canvas.style.transformOrigin = 'top left';
+    canvas.style.margin = '16px';
+    document.getElementById('zoom-label').innerText = Math.round(escalaZoom*100) + '%';
 }
 
-// ── Exportar CSV ──
-function exportCSV() {
-    const linhas = ['Página,Nome,Acertos,Total,Porcentagem,Gabarito'];
-    resultados.forEach(({pagina, resultado: r}) => {
-        if (r) linhas.push(`${pagina},"${r.nome}",${r.acertos},${r.total},${Math.round(r.acertos/r.total*100)}%,"${r.gabarito}"`);
-        else   linhas.push(`${pagina},"SEM LEITURA",,,,""`);
-    });
-    const blob = new Blob([linhas.join('\n')], {type:'text/csv;charset=utf-8;'});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href=url; a.download='resultados_omr.csv'; a.click();
-    URL.revokeObjectURL(url);
+// ── Copiar config ──
+function copiarConfig() {
+    const txt = `offsetX: ${cfg.offsetX.toFixed(3)},\noffsetY: ${cfg.offsetY.toFixed(3)},\ngapH: ${cfg.gapH.toFixed(3)},\ngapV: ${cfg.gapV.toFixed(3)},\ncolGap: ${cfg.colGap.toFixed(3)},\nthreshold: ${cfg.threshold}`;
+    navigator.clipboard.writeText(txt).then(() => {
+        const btn = document.getElementById('btn-copiar');
+        btn.innerText = '✅ Copiado!';
+        setTimeout(() => btn.innerText = '📋 Copiar valores finais', 2000);
+    }).catch(() => alert('Valores:\n\n' + txt));
 }
 </script>
 </body>
