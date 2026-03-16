@@ -3,18 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuGerador - Scanner Ultra</title>
-    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true; console.log('CV Pronto');}"></script>
+    <title>OMR Pro 2026 - Scanner Web</title>
+    
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true; console.log('OpenCV Pronto');}"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
     <style>
-        body { background: #121212; color: #e0e0e0; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
-        #video-container { position: relative; width: 90vw; height: 50vh; margin-top: 20px; border: 2px solid #228B22; border-radius: 15px; overflow: hidden; }
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #3b82f6;
+            --success: #22c55e;
+        }
+
+        body { 
+            background: var(--bg); 
+            color: #f1f5f9; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            overflow-x: hidden;
+        }
+
+        #video-container { 
+            position: relative; 
+            width: 95vw; 
+            height: 60vh; 
+            margin-top: 15px; 
+            border: 3px solid #334155; 
+            border-radius: 20px; 
+            overflow: hidden; 
+            background: #000;
+        }
+
         video { width: 100%; height: 100%; object-fit: cover; }
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; border: 10px solid rgba(0,0,0,0.3); box-sizing: border-box; }
-        .controls { padding: 20px; width: 100%; text-align: center; }
-        #status { padding: 20px; border-radius: 10px; background: #1e1e1e; border: 2px solid #333; font-size: 1.2rem; min-height: 60px; }
-        .success { border-color: #228B22 !important; background: #1b5e20 !important; color: white; }
-        button { background: #444; color: white; border: none; padding: 15px; border-radius: 10px; margin-top: 10px; width: 80%; }
+
+        .overlay { 
+            position: absolute; 
+            top: 0; left: 0; width: 100%; height: 100%; 
+            pointer-events: none; 
+            border: 20px solid rgba(15, 23, 42, 0.6); 
+            box-sizing: border-box; 
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: var(--accent);
+            box-shadow: 0 0 15px var(--accent);
+            animation: scan 2s infinite linear;
+        }
+
+        @keyframes scan {
+            0% { top: 10%; }
+            100% { top: 90%; }
+        }
+
+        .ui-panel { 
+            padding: 20px; 
+            width: 90%; 
+            max-width: 500px; 
+            text-align: center; 
+        }
+
+        #status-card { 
+            padding: 15px; 
+            border-radius: 15px; 
+            background: var(--card); 
+            border: 2px solid #334155; 
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .is-success { 
+            border-color: var(--success) !important; 
+            background: #064e3b !important; 
+        }
+
+        .info-debug {
+            font-family: monospace;
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        button { 
+            background: #334155; 
+            color: white; 
+            border: none; 
+            padding: 12px; 
+            border-radius: 10px; 
+            margin-top: 15px; 
+            width: 100%; 
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -22,11 +111,12 @@
 <div id="video-container">
     <video id="video" playsinline></video>
     <div class="overlay"></div>
+    <div class="scan-line"></div>
 </div>
 
-<div class="controls">
-    <div id="status">Iniciando câmera e motores...</div>
-    <button onclick="location.reload()">REINICIAR SCANNER</button>
+<div class="ui-panel">
+    <div id="status-card">Aguardando câmera...</div>
+    <button onclick="location.reload()">REINICIAR SISTEMA</button>
 </div>
 
 <canvas id="canvas" style="display:none;"></canvas>
@@ -34,101 +124,145 @@
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const status = document.getElementById('status');
+    const statusCard = document.getElementById('status-card');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280, height: 720 } })
-        .then(stream => { video.srcObject = stream; video.play(); requestAnimationFrame(tick); });
+    let processando = false;
+
+    // Inicia a câmera traseira em alta resolução
+    navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+    })
+    .then(stream => { 
+        video.srcObject = stream; 
+        video.play(); 
+        requestAnimationFrame(tick); 
+    })
+    .catch(err => {
+        statusCard.innerHTML = "❌ Erro ao acessar câmera: " + err.message;
+    });
 
     function tick() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && !window.pausar) {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && !processando) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            // O jsQR é muito mais sensível que o OpenCV para detectar o código
+            // jsQR caça o QR Code no frame atual
             const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
 
             if (code) {
-                console.log("QR Localizado!");
-                processarOMR(code);
+                corrigirProva(code);
             } else {
-                status.innerText = "Aponte para o QR Code da Prova";
-                status.classList.remove('success');
+                statusCard.innerText = "Mire no QR Code da Prova";
+                statusCard.classList.remove('is-success');
             }
         }
         requestAnimationFrame(tick);
     }
 
-    function processarOMR(qr) {
+    function corrigirProva(qr) {
         if (!window.cvReady) return;
-        window.pausar = true; // Para o vídeo para processar a nota
+        processando = true; // Pausa detecção para processar
 
         try {
             let src = cv.imread(canvas);
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-            // Coordenadas do QR Code vindas do jsQR
+            // Localização do QR vinda do jsQR
             const loc = qr.location;
             const p0x = loc.topLeftCorner.x;
             const p0y = loc.topLeftCorner.y;
             const p1x = loc.topRightCorner.x;
             const p1y = loc.topRightCorner.y;
 
-            let larg_qr = Math.sqrt(Math.pow(p0x - p1x, 2) + Math.pow(p0y - p1y, 2));
+            // Distância entre cantos para escala
+            let d_qr = Math.sqrt(Math.pow(p0x - p1x, 2) + Math.pow(p0y - p1y, 2));
 
-            // --- SUA CALIBRAGEM V3.3 ---
-            let start_x = p0x - (larg_qr * 1.74);
-            let start_y = p0y + (larg_qr * 2.05);
-            let esp_lin = larg_qr * 0.340;
-            let esp_col = larg_qr * 0.625;
-            let raio = Math.round(larg_qr * 0.16);
+            // CALIBRAGEM V3.3 (José Luiz)
+            let start_x = p0x - (d_qr * 1.74);
+            let start_y = p0y + (d_qr * 2.05);
+            let esp_lin = d_qr * 0.340;
+            let esp_col = d_qr * 0.625;
+            let raio = Math.round(d_qr * 0.16);
 
+            // Processamento de Imagem
             let thresh = new cv.Mat();
-            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 19, 7);
+
+            // Parsing dos dados do seu Python (AL:nome|GB:letras)
+            let nome = "Não Identificado";
+            let gabarito = "";
+            let partes = qr.data.split('|');
+            
+            partes.forEach(p => {
+                if(p.startsWith("AL:")) nome = p.replace("AL:", "").trim();
+                if(p.startsWith("GB:")) gabarito = p.replace("GB:", "").trim();
+            });
 
             let acertos = 0;
-            let partes = qr.data.split('|');
-            let aluno = partes[0].replace("AL:", "");
-            let gabarito = partes[1] ? partes[1].replace("GB:", "").trim() : "";
-            const alternativas = ['A', 'B', 'C', 'D', 'E'];
+            let log_marcas = "";
+            const alts = ['A', 'B', 'C', 'D', 'E'];
 
+            // Loop das 15 questões
             for (let q = 0; q < 15; q++) {
                 let y_at = Math.round(start_y + (q * esp_lin));
-                let max_pix = -1; let sel = -1;
+                let max_v = -1; 
+                let sel = -1;
 
                 for (let a = 0; a < 5; a++) {
                     let x_at = Math.round(start_x + (a * esp_col));
-                    let rx = x_at - raio; let ry = y_at - raio;
+                    let rx = Math.round(x_at - raio);
+                    let ry = Math.round(y_at - raio);
 
                     if (rx > 0 && ry > 0 && (rx + raio*2) < thresh.cols && (ry + raio*2) < thresh.rows) {
                         let rect = new cv.Rect(rx, ry, raio*2, raio*2);
                         let roi = thresh.roi(rect);
                         let count = cv.countNonZero(roi);
-                        if (count > max_pix) { max_pix = count; sel = a; }
+                        if (count > max_v) { max_v = count; sel = a; }
                         roi.delete();
                     }
                 }
-                if (max_pix > (raio * raio * 1.8)) {
-                    if (gabarito && q < gabarito.length && alternativas[sel] === gabarito[q]) acertos++;
+
+                // Sensibilidade: se preencheu mais de 10% da área (ajustado para celular)
+                if (max_v > (raio * raio * 1.1)) {
+                    log_marcas += alts[sel];
+                    if (gabarito && q < gabarito.length && alts[sel] === gabarito[q].toUpperCase()) {
+                        acertos++;
+                    }
+                } else {
+                    log_marcas += "_";
                 }
             }
 
-            status.classList.add('success');
-            status.innerHTML = `✅ <b>${aluno}</b><br>NOTA: ${acertos}/15<br><small>Toque na tela para o próximo</small>`;
+            // Interface de Resultado
+            statusCard.classList.add('is-success');
+            statusCard.innerHTML = `
+                <div style="font-weight:bold; color:#fff">${nome}</div>
+                <div style="font-size: 22px; margin: 5px 0;">NOTA: ${acertos}/15</div>
+                <div class="info-debug">Lido: ${log_marcas}</div>
+                <div class="info-debug">Gabarito: ${gabarito}</div>
+                <div style="font-size:10px; margin-top:10px">TOQUE NA TELA PARA PRÓXIMO</div>
+            `;
             
-            // Limpeza
+            // Limpeza de memória OpenCV
             src.delete(); gray.delete(); thresh.delete();
+
         } catch (e) {
             console.error(e);
-            window.pausar = false;
+            processando = false;
         }
     }
 
-    // Clique na tela para continuar corrigindo
-    window.onclick = () => { window.pausar = false; status.classList.remove('success'); };
+    // Clique para resetar e ler próxima prova
+    window.onclick = () => { 
+        if(processando) {
+            processando = false; 
+            statusCard.classList.remove('is-success');
+        }
+    };
 </script>
 </body>
 </html>
