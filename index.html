@@ -3,151 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner MeuGerador V7</title>
-    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady()"></script>
+    <title>MeuGerador - Scanner Ultra</title>
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true; console.log('CV Pronto');}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { background: #121212; color: #e0e0e0; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
-        .header { padding: 10px; background: #1e1e1e; width: 100%; text-align: center; color: #228B22; font-size: 14px; }
-        #video-container { position: relative; width: 90vw; height: 50vh; margin-top: 10px; border: 2px solid #444; border-radius: 12px; overflow: hidden; background: #000; }
+        body { background: #121212; color: #e0e0e0; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        #video-container { position: relative; width: 90vw; height: 50vh; margin-top: 20px; border: 2px solid #228B22; border-radius: 15px; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .target { position: absolute; top: 10%; right: 10%; width: 80px; height: 80px; border: 3px solid #00ff00; border-radius: 5px; box-shadow: 0 0 15px #00ff00; opacity: 0.8; }
-        .controls { padding: 15px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        #status { width: 85%; padding: 15px; border-radius: 8px; text-align: center; background: #1e1e1e; font-size: 1.1rem; border: 2px solid #333; }
-        .btn-scan { background: #228B22; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 18px; width: 85%; font-weight: bold; }
-        .success { border-color: #228B22 !important; background: #1b5e20 !important; }
-        canvas { display: none; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; border: 10px solid rgba(0,0,0,0.3); box-sizing: border-box; }
+        .controls { padding: 20px; width: 100%; text-align: center; }
+        #status { padding: 20px; border-radius: 10px; background: #1e1e1e; border: 2px solid #333; font-size: 1.2rem; min-height: 60px; }
+        .success { border-color: #228B22 !important; background: #1b5e20 !important; color: white; }
+        button { background: #444; color: white; border: none; padding: 15px; border-radius: 10px; margin-top: 10px; width: 80%; }
     </style>
 </head>
 <body>
 
-<div class="header">FOQUE O QR CODE NO QUADRADO VERDE</div>
-
 <div id="video-container">
     <video id="video" playsinline></video>
-    <div class="target"></div>
+    <div class="overlay"></div>
 </div>
 
 <div class="controls">
-    <div id="status">Carregando motor...</div>
-    <button class="btn-scan" onclick="corrigir()">FORÇAR LEITURA</button>
+    <div id="status">Iniciando câmera e motores...</div>
+    <button onclick="location.reload()">REINICIAR SCANNER</button>
 </div>
 
-<canvas id="canvasInput"></canvas>
+<canvas id="canvas" style="display:none;"></canvas>
 
 <script>
     const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
     const status = document.getElementById('status');
-    const canvas = document.getElementById('canvasInput');
-    let cvReady = false;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    function onOpenCvReady() {
-        cvReady = true;
-        status.innerText = "Motor Pronto! Aponte para a prova.";
-        // Iniciar loop de detecção automática a cada 1 segundo
-        setInterval(detectarAutomatico, 1000);
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280, height: 720 } })
+        .then(stream => { video.srcObject = stream; video.play(); requestAnimationFrame(tick); });
+
+    function tick() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA && !window.pausar) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // O jsQR é muito mais sensível que o OpenCV para detectar o código
+            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+            if (code) {
+                console.log("QR Localizado!");
+                processarOMR(code);
+            } else {
+                status.innerText = "Aponte para o QR Code da Prova";
+                status.classList.remove('success');
+            }
+        }
+        requestAnimationFrame(tick);
     }
 
-    navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } 
-    }).then(stream => {
-        video.srcObject = stream;
-        video.play();
-    });
+    function processarOMR(qr) {
+        if (!window.cvReady) return;
+        window.pausar = true; // Para o vídeo para processar a nota
 
-    function detectarAutomatico() {
-        if (!cvReady || status.classList.contains('success')) return;
-        corrigir(true); // Modo silencioso
-    }
-
-    function corrigir(silencioso = false) {
-        if (!cvReady || video.readyState < 2) return;
-        
-        const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-
-        let src, gray, points, detector;
         try {
-            src = cv.imread(canvas);
-            gray = new cv.Mat();
+            let src = cv.imread(canvas);
+            let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-            // MELHORIA: Aumenta contraste para o QR Code
-            cv.equalizeHist(gray, gray);
+            // Coordenadas do QR Code vindas do jsQR
+            const loc = qr.location;
+            const p0x = loc.topLeftCorner.x;
+            const p0y = loc.topLeftCorner.y;
+            const p1x = loc.topRightCorner.x;
+            const p1y = loc.topRightCorner.y;
 
-            detector = new cv.QRCodeDetector();
-            points = new cv.Mat();
-            let code = detector.decode(gray, points);
-
-            if (code && points.cols > 0) {
-                processarNota(code, points, gray, src);
-            } else if (!silencioso) {
-                status.innerText = "QR Code não detectado. Tente outro ângulo.";
-            }
-        } catch (e) {
-            console.log(e);
-        } finally {
-            if (src) src.delete(); if (gray) gray.delete();
-            if (points) points.delete(); if (detector) detector.delete();
-        }
-    }
-
-    function processarNota(code, points, gray, src) {
-        try {
-            let p0x = points.floatAt(0, 0);
-            let p0y = points.floatAt(0, 1);
-            let p1x = points.floatAt(0, 2);
-            let p1y = points.floatAt(0, 3);
             let larg_qr = Math.sqrt(Math.pow(p0x - p1x, 2) + Math.pow(p0y - p1y, 2));
 
-            // CALIBRAGEM V3.3
+            // --- SUA CALIBRAGEM V3.3 ---
             let start_x = p0x - (larg_qr * 1.74);
             let start_y = p0y + (larg_qr * 2.05);
             let esp_lin = larg_qr * 0.340;
             let esp_col = larg_qr * 0.625;
-            let raio = Math.max(1, Math.round(larg_qr * 0.16));
+            let raio = Math.round(larg_qr * 0.16);
 
             let thresh = new cv.Mat();
             cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
             let acertos = 0;
-            let dados = code.split('|');
-            let aluno = dados[0].replace("AL:", "");
-            let gabarito = dados[1] ? dados[1].replace("GB:", "").trim() : "";
+            let partes = qr.data.split('|');
+            let aluno = partes[0].replace("AL:", "");
+            let gabarito = partes[1] ? partes[1].replace("GB:", "").trim() : "";
             const alternativas = ['A', 'B', 'C', 'D', 'E'];
 
             for (let q = 0; q < 15; q++) {
                 let y_at = Math.round(start_y + (q * esp_lin));
-                let max_count = -1;
-                let sel_idx = -1;
+                let max_pix = -1; let sel = -1;
 
                 for (let a = 0; a < 5; a++) {
                     let x_at = Math.round(start_x + (a * esp_col));
                     let rx = x_at - raio; let ry = y_at - raio;
+
                     if (rx > 0 && ry > 0 && (rx + raio*2) < thresh.cols && (ry + raio*2) < thresh.rows) {
                         let rect = new cv.Rect(rx, ry, raio*2, raio*2);
                         let roi = thresh.roi(rect);
                         let count = cv.countNonZero(roi);
-                        if (count > max_count) { max_count = count; sel_idx = a; }
+                        if (count > max_pix) { max_pix = count; sel = a; }
                         roi.delete();
                     }
                 }
-                if (max_count > (raio * raio * 1.5)) {
-                    if (gabarito && q < gabarito.length && alternativas[sel_idx] === gabarito[q]) acertos++;
+                if (max_pix > (raio * raio * 1.8)) {
+                    if (gabarito && q < gabarito.length && alternativas[sel] === gabarito[q]) acertos++;
                 }
             }
 
-            status.className = "success";
-            status.innerHTML = `✅ <b>${aluno}</b><br>NOTA: ${acertos}/15`;
-            thresh.delete();
+            status.classList.add('success');
+            status.innerHTML = `✅ <b>${aluno}</b><br>NOTA: ${acertos}/15<br><small>Toque na tela para o próximo</small>`;
             
-            // Toca um som de sucesso (opcional)
-            navigator.vibrate(200); 
+            // Limpeza
+            src.delete(); gray.delete(); thresh.delete();
         } catch (e) {
-            status.innerText = "Erro ao calcular bolinhas.";
+            console.error(e);
+            window.pausar = false;
         }
     }
+
+    // Clique na tela para continuar corrigindo
+    window.onclick = () => { window.pausar = false; status.classList.remove('success'); };
 </script>
 </body>
 </html>
