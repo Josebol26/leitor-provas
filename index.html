@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMR — Calibração PDF</title>
+    <title>OMR — Calibração por Clique</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -14,161 +14,190 @@
             --text:#e8f0f5; --muted:#52687a; --card:#111922;
         }
         * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:grid; grid-template-columns:300px 1fr; overflow:hidden; }
+        body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:grid; grid-template-columns:280px 1fr; overflow:hidden; }
 
-        /* ── SIDEBAR ── */
-        .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:20px 18px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
-        .brand { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.2em; color:var(--accent); }
-        .brand span { color:var(--muted); }
-        h1 { font-size:18px; font-weight:800; }
+        /* SIDEBAR */
+        .sidebar { background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .sidebar-top { padding:20px 18px; border-bottom:1px solid var(--border); }
+        .brand { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:.2em; color:var(--accent); }
+        h1 { font-size:17px; font-weight:800; margin-top:4px; }
         h1 em { color:var(--accent2); font-style:normal; }
 
-        .sec { font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:5px; margin-bottom:8px; }
+        .steps { flex:1; overflow-y:auto; padding:16px 18px; display:flex; flex-direction:column; gap:6px; }
 
-        /* Upload */
-        .upload-zone { border:2px dashed var(--border); border-radius:12px; padding:20px 12px; text-align:center; cursor:pointer; transition:all .2s; background:var(--bg); position:relative; }
-        .upload-zone:hover { border-color:var(--accent); }
-        .upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
-        .upload-icon { font-size:28px; }
-        .upload-lbl { font-size:12px; font-weight:700; color:var(--accent); margin-top:4px; }
-        .upload-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+        /* Step card */
+        .step { border:1px solid var(--border); border-radius:12px; padding:12px 14px; transition:all .2s; opacity:.45; }
+        .step.ativo { opacity:1; border-color:var(--accent); background:rgba(0,229,255,.04); }
+        .step.feito { opacity:.7; border-color:var(--accent2); }
+        .step.feito .step-num { background:var(--accent2); color:var(--bg); }
+        .step-header { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+        .step-num { width:22px; height:22px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-family:'Space Mono',monospace; font-size:10px; font-weight:700; flex-shrink:0; transition:all .2s; }
+        .step.ativo .step-num { background:var(--accent); color:var(--bg); }
+        .step-titulo { font-size:12px; font-weight:700; }
+        .step-desc { font-size:11px; color:var(--muted); line-height:1.5; }
+        .step-status { font-family:'Space Mono',monospace; font-size:10px; margin-top:6px; color:var(--accent2); min-height:14px; }
 
-        /* Navegação de páginas */
-        .nav-row { display:flex; gap:6px; align-items:center; }
-        .nav-btn { flex:1; padding:8px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all .2s; }
-        .nav-btn:hover { border-color:var(--accent); color:var(--accent); }
-        .nav-btn:disabled { opacity:.3; cursor:not-allowed; }
-        .pag-info { font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); text-align:center; flex-shrink:0; min-width:50px; }
+        /* Threshold slider compacto */
+        .thresh-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+        .thresh-row label { font-size:10px; color:var(--muted); font-family:'Space Mono',monospace; white-space:nowrap; }
+        .thresh-row input { flex:1; accent-color:var(--accent); }
+        .thresh-row span { font-family:'Space Mono',monospace; font-size:11px; color:var(--accent); width:30px; }
 
-        /* Sliders */
-        .slider-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
-        .slider-row label { width:68px; text-align:right; flex-shrink:0; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
-        .slider-row input[type=range] { flex:1; accent-color:var(--accent); cursor:pointer; }
-        .slider-row .val { width:48px; font-family:'Space Mono',monospace; font-size:11px; color:var(--accent); flex-shrink:0; }
+        /* Botões */
+        .sidebar-bottom { padding:14px 18px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:8px; }
+        .btn-primary { width:100%; padding:13px; border:none; border-radius:10px; background:var(--accent2); color:var(--bg); font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; transition:all .2s; }
+        .btn-primary:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
+        .btn-primary:not(:disabled):hover { filter:brightness(1.1); }
+        .btn-sec { width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all .2s; }
+        .btn-sec:hover { border-color:var(--accent2); color:var(--accent2); }
+        .btn-danger { border-color:var(--danger); color:var(--danger); }
+        .btn-danger:hover { background:rgba(255,61,90,.1); border-color:var(--danger); color:var(--danger); }
 
-        /* Botões ação */
-        .btn-primary { width:100%; padding:12px; border:none; border-radius:10px; background:var(--accent2); color:var(--bg); font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; transition:all .2s; }
-        .btn-primary:hover { filter:brightness(1.1); }
-        .btn-primary:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; filter:none; }
-        .btn-secondary { width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; background:transparent; color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all .2s; }
-        .btn-secondary:hover { border-color:var(--accent2); color:var(--accent2); }
+        /* Valores finais */
+        .valores-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; font-family:'Space Mono',monospace; font-size:10px; line-height:2; display:none; }
+        .valores-box.visivel { display:block; }
+        .vl { color:var(--accent); }
 
-        /* Info QR */
-        .qr-info { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:11px; font-family:'Space Mono',monospace; line-height:1.7; }
-        .qr-info .ok  { color:var(--accent2); }
-        .qr-info .err { color:var(--danger); }
-        .qr-info .lbl { color:var(--muted); }
+        /* CANVAS AREA */
+        .canvas-area { position:relative; overflow:auto; background:#0a0a0a; display:flex; }
+        #canvas { display:block; cursor:crosshair; flex-shrink:0; }
 
-        /* Resultado */
-        .resultado-box { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
-        .res-nota { font-family:'Space Mono',monospace; font-size:28px; font-weight:700; color:var(--accent2); }
-        .res-nome { font-size:11px; color:var(--muted); margin-top:2px; word-break:break-all; }
-
-        /* ── CANVAS AREA ── */
-        .canvas-area { position:relative; overflow:auto; background:#111; display:flex; align-items:flex-start; justify-content:flex-start; }
-        #canvas { display:block; cursor:crosshair; }
-
-        /* Zoom controls */
+        /* Zoom bar */
         .zoom-bar { position:absolute; bottom:16px; right:16px; display:flex; gap:6px; z-index:10; }
-        .zoom-btn { width:36px; height:36px; border:1px solid var(--border); border-radius:8px; background:rgba(14,20,25,.9); color:var(--text); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+        .zoom-btn { width:34px; height:34px; border:1px solid var(--border); border-radius:8px; background:rgba(14,20,25,.9); color:var(--text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
         .zoom-btn:hover { border-color:var(--accent); }
-        .zoom-label { height:36px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:rgba(14,20,25,.9); color:var(--muted); font-family:'Space Mono',monospace; font-size:11px; display:flex; align-items:center; }
+        .zoom-lbl { height:34px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:rgba(14,20,25,.9); color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; display:flex; align-items:center; }
 
-        /* Legenda */
-        .legenda { display:flex; gap:10px; flex-wrap:wrap; font-size:10px; }
-        .leg-item { display:flex; align-items:center; gap:4px; }
-        .leg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        /* Upload overlay */
+        .upload-overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:5; }
+        .upload-box { border:2px dashed var(--border); border-radius:20px; padding:48px 60px; text-align:center; cursor:pointer; transition:all .2s; position:relative; }
+        .upload-box:hover { border-color:var(--accent); background:rgba(0,229,255,.03); }
+        .upload-box input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+        .upload-icon { font-size:48px; }
+        .upload-title { font-size:18px; font-weight:800; margin-top:12px; }
+        .upload-sub { font-size:12px; color:var(--muted); margin-top:4px; }
+
+        /* Nav páginas */
+        .page-nav { position:absolute; top:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; align-items:center; z-index:10; background:rgba(14,20,25,.9); border:1px solid var(--border); border-radius:10px; padding:6px 12px; }
+        .pnav-btn { background:none; border:none; color:var(--text); font-size:16px; cursor:pointer; padding:0 4px; opacity:.6; transition:opacity .2s; }
+        .pnav-btn:hover { opacity:1; }
+        .pnav-btn:disabled { opacity:.2; cursor:not-allowed; }
+        .pnav-lbl { font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); }
     </style>
 </head>
 <body>
 
-<!-- ── SIDEBAR ── -->
+<!-- SIDEBAR -->
 <aside class="sidebar">
-    <div>
-        <div class="brand">OMR<span>/</span>CALIB</div>
-        <h1 style="margin-top:6px">Calibração<br><em>Visual</em></h1>
+    <div class="sidebar-top">
+        <div class="brand">OMR<span style="color:var(--muted)">/</span>CALIB</div>
+        <h1>Calibração<br><em>por Clique</em></h1>
     </div>
 
-    <!-- Upload -->
-    <div>
-        <div class="sec">Arquivo PDF</div>
-        <div class="upload-zone" id="upload-zone">
-            <input type="file" accept="application/pdf" id="file-input">
-            <div class="upload-icon">📄</div>
-            <div class="upload-lbl" id="upload-lbl">Clique para abrir PDF</div>
-            <div class="upload-sub" id="upload-sub">Qualquer página com cartão</div>
+    <div class="steps">
+
+        <!-- Step 1: Upload -->
+        <div class="step ativo" id="step1">
+            <div class="step-header">
+                <div class="step-num">1</div>
+                <div class="step-titulo">Abrir PDF</div>
+            </div>
+            <div class="step-desc">Clique na área direita ou arraste um PDF com cartão resposta.</div>
+            <div class="step-status" id="st1"></div>
         </div>
-    </div>
 
-    <!-- Navegação de páginas -->
-    <div>
-        <div class="sec">Página</div>
-        <div class="nav-row">
-            <button class="nav-btn" id="btn-prev" onclick="mudarPag(-1)" disabled>◀</button>
-            <span class="pag-info" id="pag-info">— / —</span>
-            <button class="nav-btn" id="btn-next" onclick="mudarPag(+1)" disabled>▶</button>
+        <!-- Step 2: Clique Q1A -->
+        <div class="step" id="step2">
+            <div class="step-header">
+                <div class="step-num">2</div>
+                <div class="step-titulo">Clique na bolinha A da questão 01</div>
+            </div>
+            <div class="step-desc">Clique exatamente no centro da primeira bolinha (A) da questão 01.</div>
+            <div class="step-status" id="st2"></div>
         </div>
-    </div>
 
-    <!-- Info QR -->
-    <div>
-        <div class="sec">QR Code</div>
-        <div class="qr-info" id="qr-info">
-            <span class="err">Nenhuma página carregada</span>
+        <!-- Step 3: Clique Q1B -->
+        <div class="step" id="step3">
+            <div class="step-header">
+                <div class="step-num">3</div>
+                <div class="step-titulo">Clique na bolinha B da questão 01</div>
+            </div>
+            <div class="step-desc">Clique na segunda bolinha (B) da mesma linha — define o espaço horizontal.</div>
+            <div class="step-status" id="st3"></div>
         </div>
-    </div>
 
-    <!-- Sliders calibração -->
-    <div>
-        <div class="sec">Posição</div>
-        <div class="slider-row"><label>Offset X</label><input type="range" id="s_oX" min="-4" max="0" step="0.005" value="-2.175" oninput="upd('offsetX',this,3,'v_oX')"><span class="val" id="v_oX">-2.175</span></div>
-        <div class="slider-row"><label>Offset Y</label><input type="range" id="s_oY" min="-1" max="3"  step="0.005" value="1.560"  oninput="upd('offsetY',this,3,'v_oY')"><span class="val" id="v_oY">1.560</span></div>
-        <div class="sec" style="margin-top:4px">Espaçamento</div>
-        <div class="slider-row"><label>Gap H</label>   <input type="range" id="s_gH" min="0.1" max="1.0" step="0.001" value="0.611" oninput="upd('gapH',this,3,'v_gH')"><span class="val" id="v_gH">0.611</span></div>
-        <div class="slider-row"><label>Gap V</label>   <input type="range" id="s_gV" min="0.1" max="0.8" step="0.001" value="0.335" oninput="upd('gapV',this,3,'v_gV')"><span class="val" id="v_gV">0.335</span></div>
-        <div class="slider-row"><label>Col Gap</label> <input type="range" id="s_cG" min="0.5" max="3.0" step="0.005" value="1.680" oninput="upd('colGap',this,3,'v_cG')"><span class="val" id="v_cG">1.680</span></div>
-        <div class="sec" style="margin-top:4px">Visual</div>
-        <div class="slider-row"><label>Tamanho</label><input type="range" id="s_rb" min="3" max="40" step="1" value="12" oninput="upd('raio',this,0,'v_rb')"><span class="val" id="v_rb">12</span></div>
-        <div class="slider-row"><label>Threshold</label><input type="range" id="s_th" min="30" max="250" step="1" value="81" oninput="upd('threshold',this,0,'v_th')"><span class="val" id="v_th">81</span></div>
-    </div>
-
-    <!-- Legenda -->
-    <div>
-        <div class="sec">Legenda</div>
-        <div class="legenda">
-            <div class="leg-item"><div class="leg-dot" style="background:#00ff9d"></div> Marcada correta</div>
-            <div class="leg-item"><div class="leg-dot" style="background:#ff3d5a"></div> Marcada errada</div>
-            <div class="leg-item"><div class="leg-dot" style="background:rgba(255,255,255,.25)"></div> Vazia</div>
-            <div class="leg-item"><div class="leg-dot" style="background:#ffd600;border-radius:2px"></div> Contorno QR</div>
+        <!-- Step 4: Clique Q2A -->
+        <div class="step" id="step4">
+            <div class="step-header">
+                <div class="step-num">4</div>
+                <div class="step-titulo">Clique na bolinha A da questão 02</div>
+            </div>
+            <div class="step-desc">Clique na bolinha A da linha seguinte — define o espaço vertical.</div>
+            <div class="step-status" id="st4"></div>
         </div>
-    </div>
 
-    <!-- Resultado -->
-    <div>
-        <div class="sec">Resultado desta página</div>
-        <div class="resultado-box">
-            <div class="res-nota" id="res-nota">— / —</div>
-            <div class="res-nome" id="res-nome">Processe uma página</div>
+        <!-- Step 5: Threshold -->
+        <div class="step" id="step5">
+            <div class="step-header">
+                <div class="step-num">5</div>
+                <div class="step-titulo">Ajuste o threshold</div>
+            </div>
+            <div class="step-desc">Arraste para separar bolinhas marcadas (escuras) das vazias (claras).</div>
+            <div class="thresh-row">
+                <label>Threshold</label>
+                <input type="range" id="sl-thresh" min="30" max="230" value="100" oninput="atualizarThresh(this.value)">
+                <span id="v-thresh">100</span>
+            </div>
+            <div class="step-status" id="st5"></div>
         </div>
+
+        <!-- Valores calculados -->
+        <div id="valores-box" class="valores-box">
+            <div>offsetX: <span class="vl" id="vl-oX">—</span></div>
+            <div>offsetY: <span class="vl" id="vl-oY">—</span></div>
+            <div>gapH: <span class="vl" id="vl-gH">—</span></div>
+            <div>gapV: <span class="vl" id="vl-gV">—</span></div>
+            <div>colGap: <span class="vl" id="vl-cG">—</span></div>
+            <div>threshold: <span class="vl" id="vl-th">100</span></div>
+        </div>
+
     </div>
 
-    <!-- Ações -->
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
-        <div id="diag" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-height:14px;line-height:1.6;"></div>
-        <button class="btn-secondary" style="font-size:11px;padding:8px" onclick="autoRaio()">🔍 Auto-tamanho bolinhas</button>
-        <button class="btn-primary" id="btn-redesenhar" onclick="redesenhar()" disabled>↺ REDESENHAR</button>
-        <button class="btn-secondary" id="btn-copiar" onclick="copiarConfig()">📋 Copiar valores finais</button>
+    <div class="sidebar-bottom">
+        <button class="btn-primary" id="btn-visualizar" onclick="visualizar()" disabled>👁 VISUALIZAR RESULTADO</button>
+        <button class="btn-sec" id="btn-copiar" onclick="copiarConfig()" disabled>📋 Copiar valores</button>
+        <button class="btn-sec btn-danger" onclick="resetar()">↺ Recomeçar</button>
     </div>
 </aside>
 
-<!-- ── CANVAS ── -->
+<!-- CANVAS AREA -->
 <div class="canvas-area" id="canvas-area">
+
+    <!-- Upload overlay -->
+    <div class="upload-overlay" id="upload-overlay">
+        <div class="upload-box">
+            <input type="file" accept="application/pdf,image/*" id="file-input">
+            <div class="upload-icon">📄</div>
+            <div class="upload-title">Abrir PDF ou Imagem</div>
+            <div class="upload-sub">PDF escaneado · Foto · Uma folha por página</div>
+        </div>
+    </div>
+
     <canvas id="canvas"></canvas>
+
+    <!-- Nav páginas -->
+    <div class="page-nav" id="page-nav" style="display:none">
+        <button class="pnav-btn" id="btn-prev" onclick="mudarPag(-1)" disabled>◀</button>
+        <span class="pnav-lbl" id="pag-lbl">1 / 1</span>
+        <button class="pnav-btn" id="btn-next" onclick="mudarPag(+1)" disabled>▶</button>
+    </div>
+
+    <!-- Zoom bar -->
     <div class="zoom-bar">
-        <button class="zoom-btn" onclick="zoom(-0.25)">−</button>
-        <span class="zoom-label" id="zoom-label">100%</span>
-        <button class="zoom-btn" onclick="zoom(+0.25)">+</button>
-        <button class="zoom-btn" onclick="zoomFit()" title="Ajustar à tela">⊡</button>
+        <button class="zoom-btn" onclick="setZoom(escala-0.25)">−</button>
+        <span class="zoom-lbl" id="zoom-lbl">100%</span>
+        <button class="zoom-btn" onclick="setZoom(escala+0.25)">+</button>
+        <button class="zoom-btn" onclick="zoomFit()" title="Ajustar">⊡</button>
     </div>
 </div>
 
@@ -177,113 +206,278 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── Estado ──
-const cfg = { offsetX:-2.175, offsetY:1.560, gapH:0.611, gapV:0.335, colGap:1.680, threshold:81, raio:12 };
+let imgAtual  = null;   // ImageData original em alta res
+let qrAtual   = null;
 let pdfDoc    = null;
-let pagAtual  = 1;
-let totalPags = 0;
-let imgAtual  = null;   // ImageData da página atual (escala 2.5)
-let qrAtual   = null;   // jsQR result
-let escalaZoom = 1;
-let escalaRender = 2.5; // resolução interna
+let pagAtual  = 1, totalPags = 1;
+let escala    = 1;
+let escalaRender = 2.0;
+
+// Pontos clicados (em coordenadas da imagem original)
+let ptQ1A = null, ptQ1B = null, ptQ2A = null;
+let etapa = 1; // 1=upload, 2=clicarQ1A, 3=clicarQ1B, 4=clicarQ2A, 5=threshold
+
+// Config calculada
+let cfg = { offsetX:0, offsetY:0, gapH:0, gapV:0, colGap:1.680, threshold:100 };
 
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d', { willReadFrequently:true });
 
-// ── Sliders ──
-function upd(key, el, dec, spanId) {
-    cfg[key] = parseFloat(el.value);
-    document.getElementById(spanId).innerText = cfg[key].toFixed(dec);
-    if (imgAtual) redesenhar();
-}
-
-// ── Upload PDF ──
+// ── Upload ──
 document.getElementById('file-input').addEventListener('change', async e => {
     const f = e.target.files[0];
     if (!f) return;
-    document.getElementById('upload-lbl').innerText = f.name;
-    document.getElementById('upload-sub').innerText = 'Carregando...';
+    if (f.type === 'application/pdf') {
+        await carregarPDF(f);
+    } else {
+        await carregarImagem(f);
+    }
+});
+
+// Drag & drop na canvas area
+const area = document.getElementById('canvas-area');
+area.addEventListener('dragover', e => e.preventDefault());
+area.addEventListener('drop', async e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    if (f.type === 'application/pdf') await carregarPDF(f);
+    else await carregarImagem(f);
+});
+
+async function carregarPDF(f) {
     const buf = await f.arrayBuffer();
     pdfDoc    = await pdfjsLib.getDocument({ data: buf }).promise;
     totalPags = pdfDoc.numPages;
     pagAtual  = 1;
-    document.getElementById('upload-sub').innerText = `${totalPags} página(s)`;
-    atualizarNavBtns();
-    await carregarPagina(pagAtual);
-});
-
-// ── Navegação ──
-function mudarPag(delta) {
-    const nova = pagAtual + delta;
-    if (nova < 1 || nova > totalPags) return;
-    pagAtual = nova;
-    atualizarNavBtns();
-    carregarPagina(pagAtual);
-}
-function atualizarNavBtns() {
-    document.getElementById('pag-info').innerText  = `${pagAtual} / ${totalPags}`;
-    document.getElementById('btn-prev').disabled   = pagAtual <= 1;
-    document.getElementById('btn-next').disabled   = pagAtual >= totalPags;
+    await renderizarPag(pagAtual);
+    document.getElementById('page-nav').style.display = totalPags > 1 ? 'flex' : 'none';
+    atualizarNavPags();
 }
 
-// ── Carrega e renderiza página ──
-async function carregarPagina(n) {
-    document.getElementById('qr-info').innerHTML = '<span style="color:var(--muted)">Carregando...</span>';
-    document.getElementById('res-nota').innerText = '— / —';
-    document.getElementById('res-nome').innerText = '';
+async function carregarImagem(f) {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+        const off  = new OffscreenCanvas(img.width, img.height);
+        const ctx2 = off.getContext('2d');
+        ctx2.drawImage(img, 0, 0);
+        imgAtual = ctx2.getImageData(0, 0, img.width, img.height);
+        URL.revokeObjectURL(url);
+        aposCarregar();
+    };
+    img.src = url;
+}
 
+async function renderizarPag(n) {
     const page = await pdfDoc.getPage(n);
     const vp   = page.getViewport({ scale: escalaRender });
-
-    // Renderiza em OffscreenCanvas (alta res)
     const off  = new OffscreenCanvas(vp.width, vp.height);
     const ctx2 = off.getContext('2d');
     await page.render({ canvasContext:ctx2, viewport:vp }).promise;
     imgAtual = ctx2.getImageData(0, 0, vp.width, vp.height);
+    aposCarregar();
+}
 
-    // Tenta ler QR
+function aposCarregar() {
+    // Detecta QR
     qrAtual = jsQR(imgAtual.data, imgAtual.width, imgAtual.height);
-    atualizarQRInfo();
 
-    // Ajusta canvas e desenha
+    // Aplica imagem no canvas
     canvas.width  = imgAtual.width;
     canvas.height = imgAtual.height;
+    ctx.putImageData(imgAtual, 0, 0);
+
+    document.getElementById('upload-overlay').style.display = 'none';
     zoomFit();
-    redesenhar();
 
-    document.getElementById('btn-redesenhar').disabled = false;
+    if (qrAtual) {
+        document.getElementById('st1').innerText = '✓ QR detectado: ' + qrAtual.data.match(/AL:([^|]*)/)?.[1];
+        setEtapa(2);
+    } else {
+        document.getElementById('st1').innerText = '⚠️ QR não encontrado — continue assim mesmo';
+        setEtapa(2);
+    }
+
+    // Desenha contorno do QR se encontrado
+    if (qrAtual) desenharQR();
 }
 
-// ── Info do QR ──
-function atualizarQRInfo() {
-    const el = document.getElementById('qr-info');
-    if (!qrAtual) {
-        el.innerHTML = '<span class="err">❌ QR não encontrado</span>';
-        return;
-    }
-    const match = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-    if (!match) {
-        el.innerHTML = `<span class="err">❌ Formato inválido</span><br><span class="lbl">${qrAtual.data.substring(0,40)}</span>`;
-        return;
-    }
-    el.innerHTML = `
-        <span class="ok">✓ QR lido</span><br>
-        <span class="lbl">Aluno: </span>${match[1]}<br>
-        <span class="lbl">Gabarito: </span>${match[2]}<br>
-        <span class="lbl">Questões: </span>${match[2].length}`;
+// ── Navegação PDF ──
+function mudarPag(d) {
+    const n = pagAtual + d;
+    if (n < 1 || n > totalPags) return;
+    pagAtual = n;
+    atualizarNavPags();
+    ptQ1A=null; ptQ1B=null; ptQ2A=null;
+    setEtapa(2);
+    renderizarPag(pagAtual);
+}
+function atualizarNavPags() {
+    document.getElementById('pag-lbl').innerText = `${pagAtual} / ${totalPags}`;
+    document.getElementById('btn-prev').disabled = pagAtual <= 1;
+    document.getElementById('btn-next').disabled = pagAtual >= totalPags;
 }
 
-// ── Redesenha bolinhas sobre a imagem ──
-function redesenhar() {
-    if (!imgAtual) return;
+// ── Etapas ──
+function setEtapa(n) {
+    etapa = n;
+    [1,2,3,4,5].forEach(i => {
+        const el = document.getElementById('step'+i);
+        el.classList.remove('ativo','feito');
+        if (i < n) el.classList.add('feito');
+        if (i === n) el.classList.add('ativo');
+    });
+    if (n >= 5) {
+        document.getElementById('valores-box').classList.add('visivel');
+    }
+}
+
+// ── Clique no canvas ──
+canvas.addEventListener('click', e => {
+    if (etapa < 2 || etapa > 4) return;
+
+    const rect = canvas.getBoundingClientRect();
+    // Converte coordenada CSS → coordenada real da imagem
+    const x = (e.clientX - rect.left)  / escala;
+    const y = (e.clientY - rect.top)   / escala;
+
+    if (etapa === 2) {
+        ptQ1A = {x, y};
+        document.getElementById('st2').innerText = `✓ Q1A: (${Math.round(x)}, ${Math.round(y)})`;
+        desenharMarca(x, y, '#00e5ff', 'Q1·A');
+        setEtapa(3);
+
+    } else if (etapa === 3) {
+        ptQ1B = {x, y};
+        document.getElementById('st3').innerText = `✓ Q1B: (${Math.round(x)}, ${Math.round(y)})`;
+        desenharMarca(x, y, '#00e5ff', 'Q1·B');
+        setEtapa(4);
+
+    } else if (etapa === 4) {
+        ptQ2A = {x, y};
+        document.getElementById('st4').innerText = `✓ Q2A: (${Math.round(x)}, ${Math.round(y)})`;
+        desenharMarca(x, y, '#00e5ff', 'Q2·A');
+        calcularConfig();
+        setEtapa(5);
+        document.getElementById('btn-visualizar').disabled = false;
+        document.getElementById('btn-copiar').disabled = false;
+    }
+});
+
+// ── Desenha marcador de clique ──
+function desenharMarca(x, y, cor, label) {
+    const r = 12;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.strokeStyle = cor; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x-r-8, y); ctx.lineTo(x+r+8, y);
+    ctx.moveTo(x, y-r-8); ctx.lineTo(x, y+r+8);
+    ctx.strokeStyle = cor; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = cor;
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText(label, x + r + 4, y - 4);
+    aplicarZoom();
+}
+
+function desenharQR() {
+    if (!qrAtual) return;
+    const {topLeftCorner:tl, topRightCorner:tr, bottomRightCorner:br, bottomLeftCorner:bl} = qrAtual.location;
+    ctx.strokeStyle = '#ffd600'; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
+    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
+    ctx.closePath(); ctx.stroke();
+}
+
+// ── Calcula config a partir dos 3 pontos clicados ──
+function calcularConfig() {
+    if (!qrAtual || !ptQ1A || !ptQ1B || !ptQ2A) return;
+
+    const tl = qrAtual.location.topLeftCorner, tr = qrAtual.location.topRightCorner;
+    const bl = qrAtual.location.bottomLeftCorner, br = qrAtual.location.bottomRightCorner;
+    const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+    const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+    const size = (qrW + qrH) / 2;
+    const cx   = (tl.x + br.x) / 2;
+    const cy   = (tl.y + br.y) / 2;
+
+    // Vetores do QR (perspectiva)
+    const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
+    const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
+
+    // Converte ponto de imagem → coordenada normalizada relativa ao QR
+    // x_img = cx + normX * size * ux + normY * size * vx
+    // y_img = cy + normX * size * uy + normY * size * vy
+    // Resolve para normX, normY:
+    function imgParaNorm(pt) {
+        const dx = pt.x - cx, dy = pt.y - cy;
+        // Sistema 2x2: [ux*s, vx*s; uy*s, vy*s] * [nX; nY] = [dx; dy]
+        const det = (ux*vy - vx*uy) * size * size;
+        if (Math.abs(det) < 1e-8) return null;
+        const nX = (dx*vy - dy*vx) * size / (det / size);
+        const nY = (ux*dy - uy*dx) * size / (det / size);
+        return { x: nX / size, y: nY / size };
+    }
+
+    // Forma correta de inverter o sistema 2×2
+    function toNorm(pt) {
+        const dx = pt.x - cx, dy = pt.y - cy;
+        const det = ux*vy - vx*uy;
+        if (Math.abs(det) < 1e-10) return null;
+        return {
+            x: ( vy*dx - vx*dy) / (det * size),
+            y: (-uy*dx + ux*dy) / (det * size)
+        };
+    }
+
+    const n1A = toNorm(ptQ1A);
+    const n1B = toNorm(ptQ1B);
+    const n2A = toNorm(ptQ2A);
+
+    if (!n1A || !n1B || !n2A) {
+        alert('Erro no cálculo — tente novamente.');
+        return;
+    }
+
+    cfg.offsetX = n1A.x;
+    cfg.offsetY = n1A.y;
+    cfg.gapH    = n1B.x - n1A.x;
+    cfg.gapV    = n2A.y - n1A.y;
+
+    // Atualiza display
+    document.getElementById('vl-oX').innerText = cfg.offsetX.toFixed(3);
+    document.getElementById('vl-oY').innerText = cfg.offsetY.toFixed(3);
+    document.getElementById('vl-gH').innerText = cfg.gapH.toFixed(3);
+    document.getElementById('vl-gV').innerText = cfg.gapV.toFixed(3);
+    document.getElementById('vl-cG').innerText = cfg.colGap.toFixed(3);
+    document.getElementById('vl-th').innerText = cfg.threshold;
+
+    document.getElementById('st5').innerText =
+        `gapH=${cfg.gapH.toFixed(3)}  gapV=${cfg.gapV.toFixed(3)}`;
+}
+
+// ── Threshold ──
+function atualizarThresh(v) {
+    cfg.threshold = parseInt(v);
+    document.getElementById('v-thresh').innerText = v;
+    document.getElementById('vl-th').innerText = v;
+    if (etapa >= 5) visualizar();
+}
+
+// ── Visualizar resultado com bolinhas ──
+function visualizar() {
+    if (!imgAtual || !qrAtual) return;
 
     ctx.putImageData(imgAtual, 0, 0);
-    if (!qrAtual) return;
+    desenharQR();
 
     const match = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
-    if (!match) return;
-    const gabarito = match[2], nome = match[1];
+    if (!match) { alert('Gabarito não encontrado no QR'); return; }
+    const gabarito = match[2];
 
-    const tl = qrAtual.location.topLeftCorner,    tr = qrAtual.location.topRightCorner;
+    const tl = qrAtual.location.topLeftCorner, tr = qrAtual.location.topRightCorner;
     const bl = qrAtual.location.bottomLeftCorner, br = qrAtual.location.bottomRightCorner;
     const qrW  = Math.hypot(tr.x-tl.x, tr.y-tl.y);
     const qrH  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
@@ -292,18 +486,11 @@ function redesenhar() {
     const ux = (tr.x-tl.x)/qrW, uy = (tr.y-tl.y)/qrW;
     const vx = (bl.x-tl.x)/qrH, vy = (bl.y-tl.y)/qrH;
 
-    // Contorno QR
-    ctx.strokeStyle = '#ffd600';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
-    ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
-    ctx.closePath(); ctx.stroke();
-
     const d = imgAtual.data, W = imgAtual.width, H = imgAtual.height;
-    let acertos = 0, puladas = 0;
-    const R  = cfg.raio;               // raio visual — controlado pelo slider
-    const AM = Math.max(2, Math.round(R * 0.5)); // raio de amostragem de pixels
+    const R  = Math.max(6, Math.round(size * 0.055));
+    const AM = Math.max(2, Math.round(R * 0.5));
+
+    let acertos = 0;
 
     for (let i = 0; i < gabarito.length; i++) {
         const col = Math.floor(i/30), lin = i%30;
@@ -311,130 +498,115 @@ function redesenhar() {
         const by  = cfg.offsetY + lin*cfg.gapV;
         let marcada = -1, maxEsc = 0;
 
-        // Primeiro: detecta qual alternativa está marcada
         for (let alt = 0; alt < 5; alt++) {
             const nx = bx + alt*cfg.gapH, ny = by;
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
+            if (x<0||x>=W||y<0||y>=H) continue;
 
-            // Só lê pixels se dentro da imagem
-            if (x < 0 || x >= W || y < 0 || y >= H) continue;
-
-            let esc = 0, count = 0;
+            let esc = 0, cnt = 0;
             for (let dx=-AM;dx<=AM;dx++) for (let dy=-AM;dy<=AM;dy++) {
-                const px = Math.min(Math.max(Math.floor(x+dx),0),W-1);
-                const py = Math.min(Math.max(Math.floor(y+dy),0),H-1);
-                const idx = (py*W+px)*4;
+                const px=Math.min(Math.max(Math.floor(x+dx),0),W-1);
+                const py=Math.min(Math.max(Math.floor(y+dy),0),H-1);
+                const idx=(py*W+px)*4;
                 esc += 255-((d[idx]+d[idx+1]+d[idx+2])/3);
-                count++;
+                cnt++;
             }
-            esc /= count;
+            esc /= cnt;
             if (esc > cfg.threshold && esc > maxEsc) { maxEsc=esc; marcada=alt; }
         }
 
-        // Segundo: SEMPRE desenha todas as 5 bolinhas (mesmo fora da imagem — clamp visual)
-        let algumaVisivel = false;
         for (let alt = 0; alt < 5; alt++) {
             const nx = bx + alt*cfg.gapH, ny = by;
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
+            if (x<-100||x>W+100||y<-100||y>H+100) continue;
 
-            // Desenha mesmo que fora — mas só se não for muito longe (evita crash)
-            if (x < -200 || x > W+200 || y < -200 || y > H+200) { puladas++; continue; }
-            algumaVisivel = true;
-
-            const correta     = String.fromCharCode(65+alt) === gabarito[i];
-            const estaMarcada = alt === marcada;
+            const correta = String.fromCharCode(65+alt) === gabarito[i];
+            const marcadaEsta = alt === marcada;
 
             ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2);
-            ctx.fillStyle = estaMarcada
+            ctx.fillStyle = marcadaEsta
                 ? (correta ? 'rgba(0,255,157,.88)' : 'rgba(255,61,90,.88)')
-                : 'rgba(255,255,255,.22)';
+                : 'rgba(255,255,255,.2)';
             ctx.fill();
+            ctx.strokeStyle = marcadaEsta ? (correta?'#00ff9d':'#ff3d5a') : 'rgba(255,255,255,.25)';
+            ctx.lineWidth = 1.5; ctx.stroke();
 
-            // Borda fina para visibilidade
-            ctx.strokeStyle = estaMarcada ? (correta?'#00ff9d':'#ff3d5a') : 'rgba(255,255,255,.3)';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-
-            ctx.fillStyle = estaMarcada ? '#080c10' : 'rgba(255,255,255,.65)';
-            ctx.font = `bold ${Math.max(8, Math.round(R*0.85))}px monospace`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillStyle = marcadaEsta ? '#080c10' : 'rgba(255,255,255,.6)';
+            ctx.font = `bold ${Math.max(8,Math.round(R*.85))}px monospace`;
+            ctx.textAlign='center'; ctx.textBaseline='middle';
             ctx.fillText(String.fromCharCode(65+alt), x, y);
         }
 
-        if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
+        // Número da questão
+        const nx0 = cfg.offsetX + Math.floor(i/30)*cfg.colGap - cfg.gapH*0.6, ny0 = cfg.offsetY + (i%30)*cfg.gapV;
+        const xn = cx + nx0*size*ux + ny0*size*vx;
+        const yn = cy + nx0*size*uy + ny0*size*vy;
+        ctx.fillStyle = 'rgba(0,229,255,.75)';
+        ctx.font = `bold ${Math.max(7,Math.round(R*.7))}px monospace`;
+        ctx.textAlign='right'; ctx.textBaseline='middle';
+        ctx.fillText(String(i+1).padStart(2,'0'), xn, yn);
 
-        // Número da questão à esquerda
-        const nxNum = bx - cfg.gapH*0.7, nyNum = by;
-        const xNum  = cx + nxNum*size*ux + nyNum*size*vx;
-        const yNum  = cy + nxNum*size*uy + nyNum*size*vy;
-        if (xNum > -200 && xNum < W+200 && yNum > -200 && yNum < H+200) {
-            ctx.fillStyle = 'rgba(0,229,255,.8)';
-            ctx.font = `bold ${Math.max(7, Math.round(R*0.7))}px monospace`;
-            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-            ctx.fillText(String(i+1).padStart(2,'0'), xNum, yNum);
-        }
+        if (marcada!==-1 && String.fromCharCode(65+marcada)===gabarito[i]) acertos++;
     }
 
-    // Atualiza resultado e diagnóstico
-    document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
-    document.getElementById('res-nome').innerText = nome;
-
-    const diagEl = document.getElementById('diag');
-    const info = `Imagem: ${W}×${H}px | QR: ${Math.round(size)}px | Raio: ${R}px`;
-    if (puladas > 0) {
-        diagEl.innerHTML = `${info}<br><span style="color:#ffd600">⚠️ ${puladas} bolinhas fora — ajuste Offset</span>`;
-    } else {
-        diagEl.innerHTML = `${info}<br><span style="color:var(--accent2)">✓ Todas as ${gabarito.length*5} bolinhas visíveis</span>`;
-    }
+    document.getElementById('st5').innerText =
+        `Resultado: ${acertos}/${gabarito.length} acertos`;
 
     aplicarZoom();
-}
-
-// ── Auto-tamanho baseado no QR detectado ──
-function autoRaio() {
-    if (!qrAtual || !imgAtual) return;
-    const tl = qrAtual.location.topLeftCorner, tr = qrAtual.location.topRightCorner;
-    const bl = qrAtual.location.bottomLeftCorner;
-    const qrW = Math.hypot(tr.x-tl.x, tr.y-tl.y);
-    const qrH = Math.hypot(bl.x-tl.x, bl.y-tl.y);
-    const size = (qrW + qrH) / 2;
-    // Raio ideal: ~5.5% do tamanho do QR
-    const raioIdeal = Math.max(5, Math.min(40, Math.round(size * 0.055)));
-    cfg.raio = raioIdeal;
-    document.getElementById('s_rb').value = raioIdeal;
-    document.getElementById('v_rb').innerText = raioIdeal;
-    redesenhar();
 }
 
 // ── Zoom ──
-function zoom(delta) {
-    escalaZoom = Math.max(0.25, Math.min(4, escalaZoom + delta));
-    aplicarZoom();
-}
-function zoomFit() {
-    const area = document.getElementById('canvas-area');
-    const scaleX = (area.clientWidth  - 32) / canvas.width;
-    const scaleY = (area.clientHeight - 32) / canvas.height;
-    escalaZoom = Math.min(scaleX, scaleY, 1);
-    aplicarZoom();
-}
-function aplicarZoom() {
-    canvas.style.transform = `scale(${escalaZoom})`;
+function setZoom(z) {
+    escala = Math.max(0.1, Math.min(4, z));
+    canvas.style.transform = `scale(${escala})`;
     canvas.style.transformOrigin = 'top left';
     canvas.style.margin = '16px';
-    document.getElementById('zoom-label').innerText = Math.round(escalaZoom*100) + '%';
+    document.getElementById('zoom-lbl').innerText = Math.round(escala*100)+'%';
+}
+function zoomFit() {
+    const a = document.getElementById('canvas-area');
+    const sx = (a.clientWidth  - 32) / canvas.width;
+    const sy = (a.clientHeight - 32) / canvas.height;
+    setZoom(Math.min(sx, sy, 1));
 }
 
 // ── Copiar config ──
 function copiarConfig() {
-    const txt = `offsetX: ${cfg.offsetX.toFixed(3)},\noffsetY: ${cfg.offsetY.toFixed(3)},\ngapH: ${cfg.gapH.toFixed(3)},\ngapV: ${cfg.gapV.toFixed(3)},\ncolGap: ${cfg.colGap.toFixed(3)},\nthreshold: ${cfg.threshold}`;
+    const txt =
+`offsetX: ${cfg.offsetX.toFixed(3)}
+offsetY: ${cfg.offsetY.toFixed(3)}
+gapH: ${cfg.gapH.toFixed(3)}
+gapV: ${cfg.gapV.toFixed(3)}
+colGap: ${cfg.colGap.toFixed(3)}
+threshold: ${cfg.threshold}`;
     navigator.clipboard.writeText(txt).then(() => {
-        const btn = document.getElementById('btn-copiar');
-        btn.innerText = '✅ Copiado!';
-        setTimeout(() => btn.innerText = '📋 Copiar valores finais', 2000);
-    }).catch(() => alert('Valores:\n\n' + txt));
+        const b = document.getElementById('btn-copiar');
+        b.innerText = '✅ Copiado!';
+        setTimeout(() => b.innerText = '📋 Copiar valores', 2000);
+    }).catch(() => alert(txt));
+}
+
+// ── Resetar ──
+function resetar() {
+    ptQ1A=null; ptQ1B=null; ptQ2A=null;
+    if (imgAtual) {
+        ctx.putImageData(imgAtual, 0, 0);
+        if (qrAtual) desenharQR();
+        aplicarZoom();
+    }
+    setEtapa(imgAtual ? 2 : 1);
+    document.getElementById('btn-visualizar').disabled = true;
+    document.getElementById('btn-copiar').disabled = true;
+    document.getElementById('valores-box').classList.remove('visivel');
+    ['st2','st3','st4','st5'].forEach(id => document.getElementById(id).innerText = '');
+}
+
+function aplicarZoom() {
+    canvas.style.transform = `scale(${escala})`;
+    canvas.style.transformOrigin = 'top left';
+    canvas.style.margin = '16px';
 }
 </script>
 </body>
