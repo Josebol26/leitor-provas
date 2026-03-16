@@ -3,46 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OMR Pro - Versão Estável</title>
+    <title>OMR Pro - Versão de Precisão</title>
     
     <script async src="https://docs.opencv.org/4.x/opencv.js" onload="cv['onRuntimeInitialized']=()=>{window.cvReady=true;}"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
     <style>
         :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --success: #22c55e; }
-        body { background: var(--bg); color: #f1f5f9; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        body { background: var(--bg); color: #f1f5f9; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
         
         #video-container { 
-            position: relative; width: 100vw; height: 55vh; background: #000; overflow: hidden;
+            position: relative; width: 100vw; height: 60vh; background: #000; 
             border-bottom: 3px solid var(--accent);
         }
         video { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Linha de Varredura que você gostou */
         .scan-line {
-            position: absolute; width: 100%; height: 3px;
+            position: absolute; width: 100%; height: 2px;
             background: var(--accent);
             box-shadow: 0 0 15px var(--accent);
             top: 50%;
-            animation: scan 2.5s infinite ease-in-out;
-            z-index: 10;
+            animation: scan 2s infinite linear;
         }
-        @keyframes scan { 0% { top: 10%; } 50% { top: 90%; } 100% { top: 10%; } }
+        @keyframes scan { 0% { top: 10%; } 100% { top: 90%; } }
 
-        .ui-panel { padding: 15px; width: 90%; max-width: 500px; display: flex; flex-direction: column; gap: 10px; }
+        .ui-panel { padding: 20px; width: 90%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
         #status-card { 
             padding: 20px; border-radius: 15px; background: var(--card); border: 2px solid #334155; 
-            text-align: center; min-height: 120px; transition: 0.3s;
+            text-align: center; min-height: 100px; display: flex; flex-direction: column; justify-content: center;
         }
         .is-success { border-color: var(--success) !important; background: #064e3b !important; }
         
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         button { 
-            background: #334155; color: white; border: none; padding: 14px; 
-            border-radius: 10px; font-weight: bold; cursor: pointer;
+            background: #334155; color: white; border: none; padding: 15px; 
+            border-radius: 12px; font-weight: bold; cursor: pointer;
         }
-        .btn-torch { background: #3b82f6; }
-        .info-small { font-family: monospace; font-size: 11px; color: #94a3b8; margin-top: 8px; }
+        .btn-torch { background: #475569; border: 1px solid var(--accent); }
+        .info-debug { font-family: monospace; font-size: 11px; color: #94a3b8; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -54,7 +52,7 @@
 
 <div class="ui-panel">
     <div id="status-card">
-        <div id="msg" style="font-size: 1.2em;">Posicione o QR Code</div>
+        <div id="msg">Aproxime o QR Code da Prova</div>
     </div>
 
     <div class="controls">
@@ -75,7 +73,7 @@
     let lanternaAtiva = false;
 
     navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment", width: { ideal: 1280 } } 
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
     }).then(stream => { 
         video.srcObject = stream; 
         video.play(); 
@@ -87,7 +85,7 @@
         try {
             lanternaAtiva = !lanternaAtiva;
             await track.applyConstraints({ advanced: [{ torch: lanternaAtiva }] });
-        } catch (e) { alert("Lanterna não suportada"); }
+        } catch (e) { alert("Lanterna não disponível"); }
     }
 
     function tick() {
@@ -116,13 +114,13 @@
             let thresh = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-            // Filtro de nitidez para evitar os erros de leitura que você teve
-            cv.threshold(gray, thresh, 120, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+            // VOLTA AO MÉTODO DE PRECISÃO: Threshold Adaptativo Padrão
+            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 19, 7);
 
             const loc = qr.location;
             const d_qr = Math.sqrt(Math.pow(loc.topLeftCorner.x - loc.topRightCorner.x, 2) + Math.pow(loc.topLeftCorner.y - loc.topRightCorner.y, 2));
 
-            // Coordenadas estáveis (Calibragem José Luiz)
+            // CALIBRAGEM JOSÉ LUIZ (A que funcionou)
             let start_x = loc.topLeftCorner.x - (d_qr * 1.74);
             let start_y = loc.topLeftCorner.y + (d_qr * 2.05);
             let esp_lin = d_qr * 0.340;
@@ -152,14 +150,14 @@
                     if (rx > 0 && ry > 0 && (rx + raio*2) < thresh.cols && (ry + raio*2) < thresh.rows) {
                         let rect = new cv.Rect(rx, ry, raio*2, raio*2);
                         let roi = thresh.roi(rect);
-                        let count = cv.countNonZero(roi);
+                        let count = cv.countNonZero(roi); 
                         if (count > max_v) { max_v = count; sel = a; }
                         roi.delete();
                     }
                 }
 
-                // SUBIMOS O RIGOR: Agora exige 80% da área (ajustado para ser certeiro)
-                if (max_v > (raio * raio * 0.8)) { 
+                // RIGOR DE LEITURA (1.1): Só aceita se a mancha for forte
+                if (max_v > (raio * raio * 1.1)) { 
                     lido += alts[sel];
                     if (gabarito && q < gabarito.length && alts[sel] === gabarito[q].toUpperCase()) {
                         acertos++;
@@ -171,10 +169,10 @@
 
             statusCard.classList.add('is-success');
             statusCard.innerHTML = `
-                <div style="font-weight:bold; font-size:20px;">${nome}</div>
-                <div style="font-size:35px; margin:10px 0;">${acertos}/15</div>
-                <div class="info-small">Lido: ${lido}</div>
-                <div style="font-size:11px; color:#fff; margin-top:10px;">TOQUE PARA PRÓXIMO</div>
+                <div style="font-weight:bold; font-size:1.1em;">${nome}</div>
+                <div style="font-size:2.2em; margin:5px 0;">${acertos}/15</div>
+                <div class="info-debug">LIDO: ${lido}</div>
+                <div style="font-size:10px; margin-top:10px;">TOQUE PARA PRÓXIMO</div>
             `;
 
             src.delete(); gray.delete(); thresh.delete();
@@ -187,7 +185,7 @@
         if(processando) {
             processando = false; 
             statusCard.classList.remove('is-success');
-            statusCard.innerHTML = '<div style="font-size: 1.2em;">Posicione o QR Code</div>';
+            statusCard.innerHTML = '<div id="msg">Aproxime o QR Code da Prova</div>';
         }
     };
 </script>
