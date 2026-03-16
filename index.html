@@ -153,6 +153,7 @@
 
     <!-- Ações -->
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
+        <div id="diag" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);min-height:14px;line-height:1.4;"></div>
         <button class="btn-primary" id="btn-redesenhar" onclick="redesenhar()" disabled>↺ REDESENHAR</button>
         <button class="btn-secondary" id="btn-copiar" onclick="copiarConfig()">📋 Copiar valores finais</button>
     </div>
@@ -273,9 +274,7 @@ function atualizarQRInfo() {
 function redesenhar() {
     if (!imgAtual) return;
 
-    // Copia imagem original
     ctx.putImageData(imgAtual, 0, 0);
-
     if (!qrAtual) return;
 
     const match = qrAtual.data.match(/AL:([^|]*)\|GB:([A-E]+)/);
@@ -293,15 +292,16 @@ function redesenhar() {
 
     // Contorno QR
     ctx.strokeStyle = '#ffd600';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y);
     ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
     ctx.closePath(); ctx.stroke();
 
     const d = imgAtual.data, W = imgAtual.width, H = imgAtual.height;
-    let acertos = 0;
-    const R = Math.round(size * 0.06); // raio das bolinhas proporcional ao QR
+    let acertos = 0, puladas = 0;
+    const R  = Math.max(6, Math.round(size * 0.055)); // raio proporcional ao QR
+    const AM = Math.max(2, Math.round(R * 0.5));      // raio de amostragem
 
     for (let i = 0; i < gabarito.length; i++) {
         const col = Math.floor(i/30), lin = i%30;
@@ -309,70 +309,86 @@ function redesenhar() {
         const by  = cfg.offsetY + lin*cfg.gapV;
         let marcada = -1, maxEsc = 0;
 
+        // Primeiro: detecta qual alternativa está marcada
         for (let alt = 0; alt < 5; alt++) {
             const nx = bx + alt*cfg.gapH, ny = by;
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
-            if (x<1||x>W-2||y<1||y>H-2) continue;
 
-            // Amostra área maior para PDF de alta res
+            // Só lê pixels se dentro da imagem
+            if (x < 0 || x >= W || y < 0 || y >= H) continue;
+
             let esc = 0, count = 0;
-            const am = Math.max(1, Math.round(R * 0.6));
-            for (let dx=-am;dx<=am;dx++) for (let dy=-am;dy<=am;dy++) {
-                const px=Math.min(Math.max(Math.floor(x+dx),0),W-1);
-                const py=Math.min(Math.max(Math.floor(y+dy),0),H-1);
-                const idx=(py*W+px)*4;
+            for (let dx=-AM;dx<=AM;dx++) for (let dy=-AM;dy<=AM;dy++) {
+                const px = Math.min(Math.max(Math.floor(x+dx),0),W-1);
+                const py = Math.min(Math.max(Math.floor(y+dy),0),H-1);
+                const idx = (py*W+px)*4;
                 esc += 255-((d[idx]+d[idx+1]+d[idx+2])/3);
                 count++;
             }
             esc /= count;
-
             if (esc > cfg.threshold && esc > maxEsc) { maxEsc=esc; marcada=alt; }
         }
 
-        // Desenha todas as bolinhas
+        // Segundo: SEMPRE desenha todas as 5 bolinhas (mesmo fora da imagem — clamp visual)
+        let algumaVisivel = false;
         for (let alt = 0; alt < 5; alt++) {
             const nx = bx + alt*cfg.gapH, ny = by;
             const x  = cx + nx*size*ux + ny*size*vx;
             const y  = cy + nx*size*uy + ny*size*vy;
-            if (x<1||x>W-2||y<1||y>H-2) continue;
+
+            // Desenha mesmo que fora — mas só se não for muito longe (evita crash)
+            if (x < -200 || x > W+200 || y < -200 || y > H+200) { puladas++; continue; }
+            algumaVisivel = true;
 
             const correta     = String.fromCharCode(65+alt) === gabarito[i];
             const estaMarcada = alt === marcada;
 
             ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2);
-            if (estaMarcada) {
-                ctx.fillStyle = correta ? 'rgba(0,255,157,.85)' : 'rgba(255,61,90,.85)';
-            } else {
-                ctx.fillStyle = 'rgba(255,255,255,.2)';
-            }
+            ctx.fillStyle = estaMarcada
+                ? (correta ? 'rgba(0,255,157,.88)' : 'rgba(255,61,90,.88)')
+                : 'rgba(255,255,255,.22)';
             ctx.fill();
 
-            // Letra dentro da bolinha
-            ctx.fillStyle = estaMarcada ? '#080c10' : 'rgba(255,255,255,.6)';
-            ctx.font = `bold ${Math.max(8, Math.round(R*0.9))}px monospace`;
+            // Borda fina para visibilidade
+            ctx.strokeStyle = estaMarcada ? (correta?'#00ff9d':'#ff3d5a') : 'rgba(255,255,255,.3)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.fillStyle = estaMarcada ? '#080c10' : 'rgba(255,255,255,.65)';
+            ctx.font = `bold ${Math.max(8, Math.round(R*0.85))}px monospace`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(String.fromCharCode(65+alt), x, y);
         }
 
         if (marcada !== -1 && String.fromCharCode(65+marcada) === gabarito[i]) acertos++;
+
+        // Número da questão à esquerda
+        const nxNum = bx - cfg.gapH*0.7, nyNum = by;
+        const xNum  = cx + nxNum*size*ux + nyNum*size*vx;
+        const yNum  = cy + nxNum*size*uy + nyNum*size*vy;
+        if (xNum > -200 && xNum < W+200 && yNum > -200 && yNum < H+200) {
+            ctx.fillStyle = 'rgba(0,229,255,.8)';
+            ctx.font = `bold ${Math.max(7, Math.round(R*0.7))}px monospace`;
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(i+1).padStart(2,'0'), xNum, yNum);
+        }
     }
 
-    // Número da questão à esquerda da linha
-    for (let i = 0; i < gabarito.length; i++) {
-        const col = Math.floor(i/30), lin = i%30;
-        const bx  = cfg.offsetX + col*cfg.colGap - cfg.gapH*0.8;
-        const by  = cfg.offsetY + lin*cfg.gapV;
-        const x   = cx + bx*size*ux + by*size*vx;
-        const y   = cy + bx*size*uy + by*size*vy;
-        ctx.fillStyle = 'rgba(0,229,255,.7)';
-        ctx.font = `bold ${Math.max(7, Math.round(R*0.75))}px monospace`;
-        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        ctx.fillText(String(i+1).padStart(2,'0'), x, y);
-    }
-
+    // Atualiza resultado e diagnóstico
     document.getElementById('res-nota').innerText = `${acertos} / ${gabarito.length}`;
     document.getElementById('res-nome').innerText = nome;
+
+    // Mostra diagnóstico se alguma bolinha foi pulada
+    const diagEl = document.getElementById('diag');
+    if (puladas > 0) {
+        diagEl.innerText = `⚠️ ${puladas} bolinha(s) fora da imagem — ajuste Offset X/Y`;
+        diagEl.style.color = '#ffd600';
+    } else {
+        diagEl.innerText = `✓ Todas as ${gabarito.length * 5} bolinhas dentro da imagem`;
+        diagEl.style.color = 'var(--accent2)';
+    }
+
     aplicarZoom();
 }
 
